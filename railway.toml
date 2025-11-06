@@ -1,35 +1,35 @@
 [build]
 builder = "NIXPACKS"
 
-[deploy]
-startCommand = "php -S 0.0.0.0:$PORT index.php"
-
 [[services]]
 name = "m-api"
 source = "services/m-api"
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [[services]]
 name = "o-api"
 source = "services/o-api"
-# O-API is internal. Configure visibility via Railway UI.
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [[services]]
 name = "c-api"
 source = "services/c-api"
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [[services]]
 name = "s-api"
 source = "services/s-api"
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [[services]]
 name = "a-api"
 source = "services/a-api"
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [[services]]
 name = "db-migrator"
 source = "scripts"
 startCommand = "php run_migrations.php"
-# This service runs migrations as a one-off job.
 
 [deploy.restartPolicy]
 type = "ON_FAILURE"
