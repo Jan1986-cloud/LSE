@@ -1,4 +1,5 @@
 <?php
-// O-API bootstrap stub
-echo "O-API is alive.";
-// We will test DB connection next
+// O-API
+echo "O-API is alive and responding to private network ping.";
+// We will add its own DB test later, this is enough for the ping.
+?>
