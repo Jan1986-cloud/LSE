@@ -23,7 +23,11 @@ try {
 echo "\n";
 // Test 2: Internal Ping to O-API
 // Railway's private networking routes http://[service-name]
-$oApiUrl = 'http://o-api.railway.internal';
+$oApiPort = getenv('O_API_PORT');
+if (empty($oApiPort)) {
+	throw new Exception('O_API_PORT environment variable is not set.');
+}
+$oApiUrl = 'http://o-api.railway.internal:' . $oApiPort;
 try {
 	$curlHandle = curl_init($oApiUrl);
 	if ($curlHandle === false) {
