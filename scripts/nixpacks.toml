@@ -1,0 +1,4 @@
+# Force Nixpacks to use this as the one-and-only start command,
+# overriding any web server inference.
+[start]
+cmd = "php run_migrations.php"
