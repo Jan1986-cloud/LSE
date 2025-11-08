@@ -23,7 +23,7 @@ try {
 echo "\n";
 // Test 2: Internal Ping to O-API
 // Railway's private networking routes http://[service-name]
-$oApiUrl = 'http://o-api';
+$oApiUrl = 'http://o-api.railway.internal';
 try {
 	// Suppress warnings on failure, we'll catch it
 	$response = @file_get_contents($oApiUrl);
