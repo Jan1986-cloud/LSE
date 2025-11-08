@@ -1,2 +1,0 @@
-[start]
-cmd = "echo 'Migration already ran during build. Service sleeping.' && sleep 3600"
