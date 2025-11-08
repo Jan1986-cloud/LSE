@@ -25,16 +25,31 @@ echo "\n";
 // Railway's private networking routes http://[service-name]
 $oApiUrl = 'http://o-api.railway.internal';
 try {
-	// Suppress warnings on failure, we'll catch it
-	$response = @file_get_contents($oApiUrl);
-    
-	if ($response === false) {
-		throw new Exception('Service returned false. Is it running?');
+	$curlHandle = curl_init($oApiUrl);
+	if ($curlHandle === false) {
+		throw new Exception('Failed to initialize cURL.');
 	}
-    
+
+	curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($curlHandle, CURLOPT_TIMEOUT, 5);
+	curl_setopt($curlHandle, CURLOPT_CONNECTTIMEOUT, 5);
+
+	$response = curl_exec($curlHandle);
+	$curlError = curl_error($curlHandle);
+	$httpStatus = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
+	curl_close($curlHandle);
+
+	if ($response === false) {
+		throw new Exception($curlError !== '' ? $curlError : 'Unknown cURL error.');
+	}
+
+	if ($httpStatus >= 400 || $httpStatus === 0) {
+		throw new Exception("Unexpected HTTP status code: $httpStatus");
+	}
+
 	echo "[PING TEST]: PASSED. M-API successfully pinged O-API.\n";
 	echo "Response from O-API:\n---\n$response\n---\n";
-    
+
 } catch (Exception $e) {
 	echo "[PING TEST]: FAILED. M-API could not ping O-API at $oApiUrl.\n";
 	echo "Error: " . $e->getMessage() . "\n";
