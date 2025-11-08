@@ -26,7 +26,7 @@ try {
     
     // Read the SQL schema. The script runs in /scripts,
     // so we go one level up to the root.
-    $sqlFile = __DIR__ . '/../shared/contracts/database_schema.sql';
+    $sqlFile = __DIR__ . '/shared/contracts/database_schema.sql';
     
     $sql = file_get_contents($sqlFile);
     if ($sql === false) {
