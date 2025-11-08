@@ -2,11 +2,6 @@
 
 declare(strict_types=1);
 
-use JsonException;
-use PDO;
-use PDOException;
-use RuntimeException;
-
 final class TokenUsageAggregator
 {
     private PDO $pdo;

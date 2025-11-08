@@ -2,10 +2,6 @@
 
 declare(strict_types=1);
 
-use PDO;
-use PDOException;
-use RuntimeException;
-
 final class ResearchTool
 {
     private PDO $pdo;

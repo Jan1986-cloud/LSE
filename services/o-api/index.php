@@ -2,9 +2,6 @@
 
 declare(strict_types=1);
 
-use JsonException;
-use RuntimeException;
-
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/tools/TokenUsageAggregator.php';
@@ -23,18 +20,17 @@ try {
 		}
 	}
 
-	$tokenUsageAggregator = new TokenUsageAggregator();
-	$researchTool = new ResearchTool();
-
-	$sourceId = $researchTool->captureSource('http://example.com');
-
 	$metadata = null;
 
 	if (is_array($requestPayload) && $requestPayload !== []) {
 		$metadata = ['request_payload' => $requestPayload];
 	}
 
+	$tokenUsageAggregator = new TokenUsageAggregator();
 	$tokenLogId = $tokenUsageAggregator->logUsage(1, 1, 'ResearchTool', 100, null, 0, 0, 0.0, $metadata);
+
+	$researchTool = new ResearchTool();
+	$sourceId = $researchTool->captureSource('http://example.com');
 
 	$response = [
 		'status' => 'SUCCESS',
