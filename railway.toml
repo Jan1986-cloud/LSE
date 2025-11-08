@@ -29,7 +29,7 @@ startCommand = "php -S 0.0.0.0:$PORT index.php"
 [[services]]
 name = "db-migrator"
 source = "scripts"
-startCommand = "php run_migrations.php"
+startCommand = "php -S 0.0.0.0:$PORT index.php"
 
 [deploy.restartPolicy]
 type = "ON_FAILURE"
