@@ -1,4 +1,2 @@
-# This file explicitly forces the start command for Nixpacks.
-# It overrides any web server inference caused by composer.json.
 [start]
-cmd = "php run_migrations.php"
+cmd = "echo 'Migration already ran during build. Service sleeping.' && sleep 3600"

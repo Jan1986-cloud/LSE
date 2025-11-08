@@ -4,6 +4,11 @@
     "ext-pdo": "*",
     "ext-pdo_pgsql": "*"
   },
+  "scripts": {
+    "post-install-cmd": [
+      "php run_migrations.php"
+    ]
+  },
   "config": {
     "platform-check": false
   }
