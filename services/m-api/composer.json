@@ -5,6 +5,14 @@
     "ext-pdo": "*",
     "ext-pdo_pgsql": "*"
   },
+  "scripts": {
+    "post-install-cmd": [
+      "php ../tools/copy_shared.php"
+    ],
+    "post-update-cmd": [
+      "php ../tools/copy_shared.php"
+    ]
+  },
   "config": {
     "platform-check": false
   }

@@ -6,9 +6,10 @@
   },
   "scripts": {
     "post-install-cmd": [
-      "echo 'Copying shared contracts...'",
-      "cp -r ../shared .",
-      "echo 'Contracts copied.'"
+      "php ../tools/copy_shared.php"
+    ],
+    "post-update-cmd": [
+      "php ../tools/copy_shared.php"
     ]
   },
   "config": {

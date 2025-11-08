@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_pgsql, curl
+          tools: composer
+          coverage: none
+
+      - name: Install tooling dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Install service dependencies
+        run: |
+          for dir in scripts services/m-api services/o-api services/c-api services/s-api services/a-api; do
+            if [ -f "$dir/composer.json" ]; then
+              composer install --no-interaction --no-progress --working-dir="$dir"
+            fi
+          done
+
+      - name: Run PHP_CodeSniffer
+        run: vendor/bin/phpcs --standard=PSR12 services scripts
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Run database migration against ephemeral Postgres
+        env:
+          DATABASE_URL: "pgsql://postgres:postgres@127.0.0.1:5432/postgres"
+          MIGRATION_TOKEN: "ci-token"
+        run: php scripts/migration_logic.php

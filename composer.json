@@ -1,0 +1,10 @@
+{
+  "name": "jan1986-cloud/lse",
+  "require-dev": {
+    "phpstan/phpstan": "^1.11",
+    "squizlabs/php_codesniffer": "^3.9"
+  },
+  "config": {
+    "platform-check": false
+  }
+}
