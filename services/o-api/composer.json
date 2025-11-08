@@ -2,7 +2,8 @@
   "require": {
     "php": ">=8.1",
     "ext-pdo": "*",
-    "ext-pdo_pgsql": "*"
+    "ext-pdo_pgsql": "*",
+    "ext-curl": "*"
   },
   "config": {
     "platform-check": false
