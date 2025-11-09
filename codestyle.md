@@ -13,11 +13,10 @@
 ## JavaScript / TypeScript
 - Use [ESLint](https://eslint.org/) and [Prettier](https://prettier.io/) defaults when front-end packages are introduced.
 
-## Continuous Integration
-The GitHub Actions workflow `.github/workflows/ci.yml` enforces:
-1. `composer install` for each service and the shared toolchain.
-2. PSR-12 compliance via PHP_CodeSniffer.
-3. PHPStan static analysis.
-4. Execution of `scripts/migration_logic.php` against an ephemeral PostgreSQL instance.
+## Railway Deployment
+Code quality is enforced through:
+1. PSR-12 compliance standards for all PHP code.
+2. PHPStan static analysis for type safety.
+3. Database migrations validated during deployment.
 
-Commits that fail any gate must be corrected before merging to `main`.
+All services deploy automatically to Railway.app with proper dependency management via Composer.

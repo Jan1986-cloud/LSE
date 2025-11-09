@@ -6,5 +6,5 @@
 - **QC loop:**
   1. Verify `/health` responds `200` from inside the private network.
   2. Confirm `/migrate` is unreachable; only `/health`/`/live` remain visible.
-  3. Ensure CI PHPStan/PHPCS gates pass before merge.
-- **Testing hooks:** use the GitHub Actions CI to run `composer install` and linting before promoting changes.
+  3. Ensure PSR-12 compliance and static analysis standards.
+- **Testing:** Manual verification on Railway deployment with proper dependency management.

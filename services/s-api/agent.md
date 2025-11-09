@@ -4,5 +4,5 @@
 - **Operational checks:**
   - `/health` must return `200` from `*.railway.internal` clients.
   - `/live` ensures the PHP runtime is alive without dependencies.
-- **Quality loop:** ensure CI (lint + PHPStan + migrations) passes prior to deployment.
+- **Quality loop:** ensure PSR-12 compliance and static analysis standards before deployment.
 - **Networking:** reachable only over Railway Private Networking; requests from public ingress should be rejected upstream.

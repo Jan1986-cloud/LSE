@@ -47,9 +47,9 @@ We will use a Monorepo structure as defined in the project plan. The Team Lead i
 #### 4.2 Coding Standards (`codestyle.md`)
 
 A `codestyle.md` file must be created and maintained at the root of the repository, defining the exact standards and linting configurations.
-*   **PHP:** Strict adherence to PSR-12. Utilize PHPStan (or similar static analysis) in the CI pipeline.
+*   **PHP:** Strict adherence to PSR-12. Utilize PHPStan (or similar static analysis) for quality assurance.
 *   **JavaScript/TypeScript:** Adherence to ESLint (e.g., Airbnb style) and Prettier.
-*   **Enforcement:** Automated tooling must be configured in the CI/CD pipeline. Non-compliant code will not be merged.
+*   **Enforcement:** Quality standards enforced through Railway deployment and code review processes.
 
 #### 4.3 Documentation (`agent.md` & `README.md`)
 
