@@ -52,6 +52,24 @@ try {
             respondJson(200, ['status' => 'ok']);
             break;
 
+        case '/ping-o-api':
+            enforceAllowedMethod($method, ['GET']);
+            $oApiResponse = checkOApiConnectivity();
+            if ($oApiResponse['status'] === 'pass') {
+                respondJson(200, [
+                    'status' => 'success',
+                    'message' => 'O-API connectivity test passed',
+                    'o_api_response' => $oApiResponse['details']
+                ]);
+            } else {
+                respondJson(503, [
+                    'status' => 'failed',
+                    'message' => 'O-API connectivity test failed',
+                    'error' => $oApiResponse['details']
+                ]);
+            }
+            break;
+
         case '/auth/login':
             enforceAllowedMethod($method, ['POST']);
             $payload = readJsonBody();
