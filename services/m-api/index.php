@@ -14,6 +14,7 @@ use LSE\Services\MApi\BillingService;
 
 const O_API_INTERNAL_HOST = 'o-api.railway.internal';
 const O_API_HTTP_TIMEOUT_MS = 1000;
+const O_API_PROBE_PORTS = [8080, 3000, 8000, 5000];
 
 try {
     $pdo = createDatabaseConnection();
@@ -273,46 +274,157 @@ function respondHealth(PDO $pdo): void
  */
 function checkOApiConnectivity(): array
 {
-    $rawPort = getenv('O_API_INTERNAL_PORT');
-    $normalized = $rawPort === false ? null : trim((string) $rawPort);
+    $plan = buildOApiPortCandidates();
+    $lastStatus = 0;
+    $lastError = $plan['default_error'];
+    $lastUrl = buildOApiUrl($plan['default_port_hint'] ?? 0);
 
-    if ($normalized === null || $normalized === '') {
-        return [
-            'ok' => false,
-            'http_status' => 0,
-            'attempted_url' => buildOApiUrl(null, $normalized),
-            'error_details' => 'invalid_internal_port',
-        ];
+    foreach ($plan['candidates'] as $port) {
+        $url = buildOApiUrl($port);
+        $result = attemptOApiHealth($url);
+        if ($result['ok']) {
+            return [
+                'ok' => true,
+                'http_status' => $result['http_status'],
+                'attempted_url' => $url,
+                'error_details' => null,
+            ];
+        }
+
+        $lastStatus = $result['http_status'];
+        $lastError = $result['error'];
+        $lastUrl = $url;
     }
 
-    if (!ctype_digit($normalized)) {
-        return [
-            'ok' => false,
-            'http_status' => 0,
-            'attempted_url' => buildOApiUrl(null, $normalized),
-            'error_details' => 'invalid_internal_port',
-        ];
+    if ($plan['default_error'] !== null && ($lastError === null || $lastError === 'timeout')) {
+        $lastError = $plan['default_error'];
+        $lastStatus = 0;
+        $lastUrl = buildOApiUrl($plan['default_port_hint'] ?? 0);
     }
 
-    $port = (int) $normalized;
+    return [
+        'ok' => false,
+        'http_status' => $lastStatus,
+        'attempted_url' => $lastUrl,
+        'error_details' => $lastError ?? 'timeout',
+    ];
+}
+
+/**
+ * @return array{candidates:int[],default_error:?string,default_port_hint:int}
+ */
+function buildOApiPortCandidates(): array
+{
+    $candidates = [];
+    $defaultError = null;
+    $defaultPortHint = 0;
+
+    $raw = readEnvValue('O_API_INTERNAL_PORT');
+    if ($raw !== null) {
+        $trimmed = trim($raw);
+        if ($trimmed !== '') {
+            $aliasPort = resolvePortAlias($trimmed);
+            if ($aliasPort !== null) {
+                $candidates[] = $aliasPort;
+                $defaultPortHint = $aliasPort;
+            } elseif (ctype_digit($trimmed)) {
+                $value = (int) $trimmed;
+                if ($value > 0 && $value <= 65535) {
+                    $candidates[] = $value;
+                    $defaultPortHint = $value;
+                } else {
+                    $defaultError = 'invalid_internal_port';
+                    $defaultPortHint = $value;
+                }
+            } else {
+                $defaultError = 'invalid_internal_port';
+                $digits = preg_replace('/\D+/', '', $trimmed);
+                if (is_string($digits) && $digits !== '') {
+                    $defaultPortHint = (int) $digits;
+                }
+            }
+        } else {
+            $defaultError = 'invalid_internal_port';
+        }
+    } else {
+        $defaultError = 'invalid_internal_port';
+    }
+
+    foreach (O_API_PROBE_PORTS as $fallbackPort) {
+        if ($fallbackPort > 0 && $fallbackPort <= 65535 && !in_array($fallbackPort, $candidates, true)) {
+            $candidates[] = $fallbackPort;
+        }
+    }
+
+    if (!isset($candidates[0])) {
+        $candidates[] = $defaultPortHint > 0 && $defaultPortHint <= 65535 ? $defaultPortHint : 8080;
+    }
+
+    if ($defaultPortHint <= 0 || $defaultPortHint > 65535) {
+        $defaultPortHint = $candidates[0] ?? 0;
+    }
+
+    return [
+        'candidates' => $candidates,
+        'default_error' => $defaultError,
+        'default_port_hint' => $defaultPortHint,
+    ];
+}
+
+function readEnvValue(string $key): ?string
+{
+    $value = getenv($key);
+    if ($value !== false && $value !== '') {
+        return $value;
+    }
+
+    if (isset($_ENV[$key]) && $_ENV[$key] !== '') {
+        return (string) $_ENV[$key];
+    }
+
+    if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') {
+        return (string) $_SERVER[$key];
+    }
+
+    return null;
+}
+
+function resolvePortAlias(string $value): ?int
+{
+    if (preg_match('/^\$?\{?PORT\}?$/i', $value) !== 1) {
+        return null;
+    }
+
+    $portEnv = readEnvValue('PORT');
+    if ($portEnv === null) {
+        return null;
+    }
+
+    $trimmed = trim($portEnv);
+    if ($trimmed === '' || !ctype_digit($trimmed)) {
+        return null;
+    }
+
+    $port = (int) $trimmed;
     if ($port < 1 || $port > 65535) {
-        return [
-            'ok' => false,
-            'http_status' => 0,
-            'attempted_url' => buildOApiUrl(null, $normalized),
-            'error_details' => 'invalid_internal_port',
-        ];
+        return null;
     }
 
-    $url = buildOApiUrl($port, null);
+    return $port;
+}
+
+/**
+ * @return array{ok:bool,http_status:int,error:?string}
+ */
+function attemptOApiHealth(string $url): array
+{
     $handle = curl_init($url);
 
     if ($handle === false) {
         return [
             'ok' => false,
             'http_status' => 0,
-            'attempted_url' => $url,
-            'error_details' => 'timeout',
+            'error' => 'timeout',
         ];
     }
 
@@ -332,50 +444,43 @@ function checkOApiConnectivity(): array
     $status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
     curl_close($handle);
 
-    $httpStatus = $status !== false ? (int) $status : 0;
-
     if ($response === false) {
         return [
             'ok' => false,
             'http_status' => 0,
-            'attempted_url' => $url,
-            'error_details' => 'timeout',
+            'error' => 'timeout',
         ];
     }
 
+    $httpStatus = $status !== false ? (int) $status : 0;
     if ($httpStatus >= 200 && $httpStatus < 300) {
         return [
             'ok' => true,
             'http_status' => $httpStatus,
-            'attempted_url' => $url,
-            'error_details' => null,
+            'error' => null,
+        ];
+    }
+
+    if ($httpStatus > 0) {
+        return [
+            'ok' => false,
+            'http_status' => $httpStatus,
+            'error' => 'http_error',
         ];
     }
 
     return [
         'ok' => false,
-        'http_status' => $httpStatus > 0 ? $httpStatus : 0,
-        'attempted_url' => $url,
-        'error_details' => 'http_error',
+        'http_status' => 0,
+        'error' => 'timeout',
     ];
 }
 
-function buildOApiUrl(?int $port, ?string $rawPort): string
+function buildOApiUrl(int $port): string
 {
-    if ($port !== null) {
-        return sprintf('http://%s:%d/health', O_API_INTERNAL_HOST, $port);
+    if ($port < 0 || $port > 65535) {
+        $port = 0;
     }
 
-    $suffix = $rawPort ?? '';
-    $suffix = trim($suffix);
-    if ($suffix === '') {
-        $suffix = '0';
-    }
-
-    $sanitised = preg_replace('/[^0-9]/', '', $suffix);
-    if ($sanitised === null || $sanitised === '') {
-        $sanitised = '0';
-    }
-
-    return sprintf('http://%s:%s/health', O_API_INTERNAL_HOST, $sanitised);
+    return sprintf('http://%s:%d/health', O_API_INTERNAL_HOST, $port);
 }
