@@ -1,0 +1,31 @@
+# Dependencies
+/vendor/
+*/vendor/
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Cache directories
+.cache/
+.tmp/
+
+# Build outputs
+/build/
+/dist/

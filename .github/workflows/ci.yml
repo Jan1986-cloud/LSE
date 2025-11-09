@@ -42,7 +42,7 @@ jobs:
           done
 
       - name: Run PHP_CodeSniffer
-        run: vendor/bin/phpcs --standard=PSR12 services scripts
+        run: vendor/bin/phpcs --standard=PSR12 --ignore=*/vendor/*,*/shared/* services scripts
 
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --no-progress

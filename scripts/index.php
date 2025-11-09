@@ -101,4 +101,3 @@ function getAuthorizationHeader(): ?string
 
     return null;
 }
-?>

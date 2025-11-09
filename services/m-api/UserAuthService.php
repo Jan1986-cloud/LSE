@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace LSE\Services\MApi;
+
 class UserAuthService
 {
     private PDO $pdo;
@@ -30,7 +32,9 @@ class UserAuthService
             throw new RuntimeException('Failed to hash password.');
         }
 
-        $sql = 'INSERT INTO cms_users (email, password_hash) VALUES (:email, :password_hash) RETURNING id, email, created_at';
+        $sql = 'INSERT INTO cms_users (email, password_hash) 
+                VALUES (:email, :password_hash) 
+                RETURNING id, email, created_at';
 
         try {
             $stmt = $this->pdo->prepare($sql);
@@ -82,7 +86,9 @@ class UserAuthService
         $name = 'session-' . gmdate('Ymd\THis\Z');
         $lastFour = substr($apiKey, -4);
 
-        $insertKeySql = 'INSERT INTO cms_api_keys (user_id, name, hashed_key, last_four) VALUES (:user_id, :name, :hashed_key, :last_four) RETURNING id';
+        $insertKeySql = 'INSERT INTO cms_api_keys (user_id, name, hashed_key, last_four) 
+                         VALUES (:user_id, :name, :hashed_key, :last_four) 
+                         RETURNING id';
         $stmt = $this->pdo->prepare($insertKeySql);
         $stmt->execute([
             'user_id' => (int) $user['id'],
@@ -107,7 +113,10 @@ class UserAuthService
     {
         $hashedKey = $this->hashApiKey($apiKey);
 
-        $sql = 'SELECT k.id AS api_key_id, k.user_id, u.email FROM cms_api_keys k JOIN cms_users u ON u.id = k.user_id WHERE k.hashed_key = :hashed_key AND u.is_active = TRUE';
+        $sql = 'SELECT k.id AS api_key_id, k.user_id, u.email 
+                FROM cms_api_keys k 
+                JOIN cms_users u ON u.id = k.user_id 
+                WHERE k.hashed_key = :hashed_key AND u.is_active = TRUE';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(['hashed_key' => $hashedKey]);
         $record = $stmt->fetch(PDO::FETCH_ASSOC);

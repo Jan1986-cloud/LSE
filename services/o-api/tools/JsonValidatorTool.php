@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace LSE\Services\OApi\Tools;
+
 final class JsonValidatorTool
 {
     public function validateAndRepair(string $jsonPayload): array

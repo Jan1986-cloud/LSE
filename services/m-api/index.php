@@ -257,7 +257,10 @@ function resolveOApiPort(): int
 
     $port = (int) $provided;
     if ($port !== O_API_DEFAULT_PORT) {
-        error_log('[m-api] Warning: O_API_INTERNAL_PORT differs from documented fallback (' . O_API_DEFAULT_PORT . ').');
+        error_log(
+            '[m-api] Warning: O_API_INTERNAL_PORT differs from documented fallback (' 
+            . O_API_DEFAULT_PORT . ').'
+        );
     }
 
     return $port;
@@ -304,4 +307,3 @@ function logDatabaseEnv(): void
     $status = ($databaseUrl !== false && $databaseUrl !== '') ? 'detected' : 'absent';
     error_log('[m-api] env:DATABASE_URL ' . $status);
 }
-

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace LSE\Services\OApi\Tools;
+
 final class TokenUsageAggregator
 {
     private PDO $pdo;
@@ -11,15 +13,28 @@ final class TokenUsageAggregator
         $this->pdo = $pdo ?? $this->createConnection();
     }
 
-    public function logUsage(int $userId, int|string $workflowId, string $toolName, int $tokenCount, ?int $blueprintId = null, int $inputTokens = 0, int $outputTokens = 0, float $costAmount = 0.0, ?array $metadata = null): int
-    {
+    public function logUsage(
+        int $userId,
+        int|string $workflowId,
+        string $toolName,
+        int $tokenCount,
+        ?int $blueprintId = null,
+        int $inputTokens = 0,
+        int $outputTokens = 0,
+        float $costAmount = 0.0,
+        ?array $metadata = null
+    ): int {
         $metadataPayload = null;
 
         if ($metadata !== null) {
             try {
                 $metadataPayload = json_encode($metadata, JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
-                throw new RuntimeException('Failed to encode metadata payload: ' . $exception->getMessage(), 0, $exception);
+                throw new RuntimeException(
+                    'Failed to encode metadata payload: ' . $exception->getMessage(),
+                    0,
+                    $exception
+                );
             }
         }
 

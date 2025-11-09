@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace LSE\Services\MApi;
+
 class BillingService
 {
     private PDO $pdo;
@@ -86,7 +88,11 @@ class BillingService
 
     private function fetchActivePlan(int $userId): ?array
     {
-        $sql = 'SELECT bp.* FROM cms_user_billing_plans ubp JOIN cms_billing_plans bp ON bp.id = ubp.billing_plan_id WHERE ubp.user_id = :user_id AND ubp.active = TRUE ORDER BY ubp.assigned_at DESC LIMIT 1';
+        $sql = 'SELECT bp.* 
+                FROM cms_user_billing_plans ubp 
+                JOIN cms_billing_plans bp ON bp.id = ubp.billing_plan_id 
+                WHERE ubp.user_id = :user_id AND ubp.active = TRUE 
+                ORDER BY ubp.assigned_at DESC LIMIT 1';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(['user_id' => $userId]);
         $plan = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -105,7 +111,11 @@ class BillingService
 
     private function fetchTokenUsage(int $userId): int
     {
-        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(tokens_used), 0) AS total_tokens FROM cms_token_logs WHERE user_id = :user_id');
+        $stmt = $this->pdo->prepare(
+            'SELECT COALESCE(SUM(tokens_used), 0) AS total_tokens 
+             FROM cms_token_logs 
+             WHERE user_id = :user_id'
+        );
         $stmt->execute(['user_id' => $userId]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 

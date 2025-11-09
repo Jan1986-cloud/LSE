@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 echo "Attempting database migration...\n";
@@ -75,7 +76,8 @@ function logDatabaseEnv(bool $detected): void
 function schemaAlreadyApplied(PDO $pdo): bool
 {
     $stmt = $pdo->prepare(
-        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = :table) AS present"
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables 
+         WHERE table_schema = 'public' AND table_name = :table) AS present"
     );
     $stmt->execute(['table' => 'cms_users']);
     $result = $stmt->fetch();
@@ -105,4 +107,3 @@ function verifyLargeHtmlSupport(PDO $pdo): void
         echo "Large HTML payload test inserted.\n";
     }
 }
-?>

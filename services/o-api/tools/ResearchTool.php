@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace LSE\Services\OApi\Tools;
+
 final class ResearchTool
 {
     private PDO $pdo;
@@ -89,7 +91,9 @@ SQL;
         curl_close($curlHandle);
 
         if ($response === false) {
-            throw new RuntimeException('cURL error while fetching source: ' . ($curlError !== '' ? $curlError : 'unknown error'));
+            throw new RuntimeException(
+                'cURL error while fetching source: ' . ($curlError !== '' ? $curlError : 'unknown error')
+            );
         }
 
         if ($httpStatus >= 400 || $httpStatus === 0) {
