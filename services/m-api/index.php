@@ -13,7 +13,6 @@ use LSE\Services\MApi\UserAuthService;
 use LSE\Services\MApi\BillingService;
 
 const O_API_INTERNAL_HOST = 'o-api.railway.internal';
-const O_API_DEFAULT_PORT = 8080; // See TECHNICAL_DEBT.md entry P0-001 for context.
 
 header('Content-Type: application/json');
 
@@ -252,106 +251,137 @@ function createDatabaseConnection(): PDO
 
 function respondHealth(PDO $pdo): void
 {
+    $databaseStatus = 'pass';
+    $databaseError = null;
+
     try {
         $pdo->query('SELECT 1');
     } catch (PDOException $e) {
-        respondJson(500, [
-            'error' => 'Database ping failed.',
-            'details' => $e->getMessage(),
-        ]);
-        return;
+        $databaseStatus = 'fail';
+        $databaseError = $e->getMessage();
     }
 
     $connectivity = checkOApiConnectivity();
 
-    $statusCode = $connectivity['ok'] ? 200 : 502;
-    respondJson($statusCode, [
-        'status' => $connectivity['ok'] ? 'ok' : 'degraded',
+    $payload = [
+        'status' => ($databaseStatus === 'pass' && $connectivity['ok']) ? 'ok' : 'degraded',
         'checks' => [
-            'database' => 'pass',
+            'database' => $databaseStatus,
             'o-api' => $connectivity['ok'] ? 'pass' : 'error',
         ],
         'o_api_details' => [
             'http_status' => $connectivity['http_status'],
-            'error_details' => $connectivity['error_details'],
             'attempted_url' => $connectivity['attempted_url'],
+            'error_details' => $connectivity['error_details'],
         ],
-    ]);
-}
+    ];
 
-function resolveOApiPort(): int
-{
-    $provided = getenv('O_API_INTERNAL_PORT');
-    if ($provided === false || $provided === '') {
-        return O_API_DEFAULT_PORT;
+    if ($databaseError !== null) {
+        $payload['database_error'] = $databaseError;
     }
 
-    if (!ctype_digit($provided)) {
-        error_log('[m-api] Warning: O_API_INTERNAL_PORT is non-numeric; falling back to ' . O_API_DEFAULT_PORT);
-        return O_API_DEFAULT_PORT;
-    }
-
-    $port = (int) $provided;
-    if ($port !== O_API_DEFAULT_PORT) {
-        error_log(
-            '[m-api] Warning: O_API_INTERNAL_PORT differs from documented fallback ('
-            . O_API_DEFAULT_PORT . ').'
-        );
-    }
-
-    return $port;
+    respondJson(200, $payload);
 }
 
 function checkOApiConnectivity(): array
 {
-    $port = resolveOApiPort();
-    $url = 'http://' . O_API_INTERNAL_HOST . ':' . $port . '/health';
+    $rawPort = getenv('O_API_INTERNAL_PORT');
+    $attemptedUrl = 'http://' . O_API_INTERNAL_HOST . ':<port=undefined>/health';
 
-    $result = [
-        'ok' => false,
-        'status' => 'error',
-        'attempted_url' => $url,
-        'http_status' => null,
-        'response_body' => null,
-        'error_details' => null,
-    ];
+    if ($rawPort === false || trim($rawPort) === '') {
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => 0,
+            'response_body' => null,
+            'error_details' => 'invalid_internal_port',
+            'attempted_url' => $attemptedUrl,
+        ];
+    }
+
+    $portString = trim($rawPort);
+    if (!ctype_digit($portString)) {
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => 0,
+            'response_body' => null,
+            'error_details' => 'invalid_internal_port',
+            'attempted_url' => 'http://' . O_API_INTERNAL_HOST . ':<port=' . $portString . '>/health',
+        ];
+    }
+
+    $port = (int) $portString;
+    if ($port <= 0 || $port > 65535) {
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => 0,
+            'response_body' => null,
+            'error_details' => 'invalid_internal_port',
+            'attempted_url' => 'http://' . O_API_INTERNAL_HOST . ':<port=' . $portString . '>/health',
+        ];
+    }
+
+    $url = 'http://' . O_API_INTERNAL_HOST . ':' . $port . '/health';
 
     $curlHandle = curl_init($url);
     if ($curlHandle === false) {
-        $result['error_details'] = 'Failed to initialize cURL.';
-        return $result;
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => 0,
+            'response_body' => null,
+            'error_details' => 'Failed to initialize cURL.',
+            'attempted_url' => $url,
+        ];
     }
 
     curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($curlHandle, CURLOPT_TIMEOUT, 5);
-    curl_setopt($curlHandle, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($curlHandle, CURLOPT_TIMEOUT, 3);
+    curl_setopt($curlHandle, CURLOPT_CONNECTTIMEOUT, 3);
 
     $response = curl_exec($curlHandle);
-    $error = curl_error($curlHandle);
+    $curlError = curl_error($curlHandle);
     $status = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
     curl_close($curlHandle);
 
-    if ($status !== false) {
-        $result['http_status'] = (int) $status;
-    }
+    $httpStatus = $status !== false ? (int) $status : 0;
 
     if ($response === false) {
-        $result['error_details'] = $error !== '' ? $error : 'Unknown cURL error.';
-        return $result;
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => $httpStatus,
+            'response_body' => null,
+            'error_details' => $curlError !== '' ? $curlError : 'Unknown cURL error.',
+            'attempted_url' => $url,
+        ];
     }
 
-    $result['response_body'] = $response;
+    $trimmedBody = trim($response);
+    $bodySnippet = $trimmedBody === '' ? '' : mb_substr($trimmedBody, 0, 120);
 
-    if ($status >= 400 || $status === 0) {
-        $result['error_details'] = 'Unexpected HTTP status ' . $status;
-        return $result;
+    if ($httpStatus < 200 || $httpStatus >= 300) {
+        $snippet = $bodySnippet !== '' ? $bodySnippet : '(empty response)';
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'http_status' => $httpStatus,
+            'response_body' => $bodySnippet,
+            'error_details' => 'HTTP ' . $httpStatus . ' response: ' . $snippet,
+            'attempted_url' => $url,
+        ];
     }
 
-    $result['ok'] = true;
-    $result['status'] = 'pass';
-    $result['error_details'] = null;
-
-    return $result;
+    return [
+        'ok' => true,
+        'status' => 'pass',
+        'http_status' => $httpStatus,
+        'response_body' => $bodySnippet,
+        'error_details' => null,
+        'attempted_url' => $url,
+    ];
 }
 
 function logDatabaseEnv(): void

@@ -2,98 +2,40 @@
 
 declare(strict_types=1);
 
-// Ensure tool classes are available even when Composer autoloading is unavailable in production.
-foreach ([
-    'tools/TokenUsageAggregator.php',
-    'tools/ResearchTool.php',
-    'tools/JsonValidatorTool.php',
-] as $dependency) {
-    require_once __DIR__ . '/' . $dependency;
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+
+if ($method !== 'GET') {
+    header('Allow: GET');
+    respondJson(405, ['error' => 'method_not_allowed']);
+    exit;
 }
-
-use LSE\Services\OApi\Tools\TokenUsageAggregator;
-use LSE\Services\OApi\Tools\ResearchTool;
-use LSE\Services\OApi\Tools\JsonValidatorTool;
-
-$requestUri = $_SERVER['REQUEST_URI'] ?? '/';
-$path = parse_url($requestUri, PHP_URL_PATH) ?? '/';
 
 switch ($path) {
     case '/health':
-        respondHealth();
+        respondJson(200, ['status' => 'ok', 'service' => 'o-api']);
         break;
 
-    case '/live':
-        respondLive();
+    case '/internal/ping':
+        respondJson(200, ['status' => 'ok', 'from' => 'o-api']);
         break;
 
     default:
-        handleMainRequest();
+        respondJson(404, ['error' => 'not_found']);
+        break;
 }
 
-function handleMainRequest(): void
+function respondJson(int $statusCode, array $payload): void
 {
-    header('Content-Type: application/json');
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
 
-    try {
-        $rawInput = file_get_contents('php://input') ?: '';
-        $requestPayload = null;
-
-        if ($rawInput !== '') {
-            try {
-                $requestPayload = json_decode($rawInput, true, 512, JSON_THROW_ON_ERROR);
-            } catch (JsonException $jsonException) {
-                throw new RuntimeException(
-                    'Malformed JSON payload: ' . $jsonException->getMessage(),
-                    0,
-                    $jsonException
-                );
-            }
-        }
-
-        $metadata = null;
-
-        if (is_array($requestPayload) && $requestPayload !== []) {
-            $metadata = ['request_payload' => $requestPayload];
-        }
-
-        $tokenUsageAggregator = new TokenUsageAggregator();
-        $tokenLogId = $tokenUsageAggregator->logUsage(1, 1, 'ResearchTool', 100, null, 0, 0, 0.0, $metadata);
-
-        $researchTool = new ResearchTool();
-        $sourceId = $researchTool->captureSource('http://example.com');
-
-        $response = [
-            'status' => 'SUCCESS',
-            'source_id' => $sourceId,
-            'token_log_id' => $tokenLogId,
-        ];
-
-        echo json_encode($response, JSON_THROW_ON_ERROR);
-    } catch (Throwable $exception) {
+    $encoded = json_encode($payload, JSON_UNESCAPED_SLASHES);
+    if ($encoded === false) {
         http_response_code(500);
-
-        $errorResponse = [
-            'status' => 'ERROR',
-            'message' => $exception->getMessage(),
-        ];
-
-        try {
-            echo json_encode($errorResponse, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            echo '{"status":"ERROR","message":"Failed to encode error response."}';
-        }
+        echo '{"error":"response_encoding_failed"}';
+        return;
     }
-}
 
-function respondHealth(): void
-{
-    header('Content-Type: application/json');
-    echo json_encode(['status' => 'ok', 'service' => 'o-api'], JSON_UNESCAPED_SLASHES);
-}
-
-function respondLive(): void
-{
-    header('Content-Type: application/json');
-    echo json_encode(['status' => 'live'], JSON_UNESCAPED_SLASHES);
+    echo $encoded;
 }
