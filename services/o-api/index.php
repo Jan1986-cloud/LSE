@@ -34,7 +34,11 @@ function handleMainRequest(): void
             try {
                 $requestPayload = json_decode($rawInput, true, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $jsonException) {
-                throw new RuntimeException('Malformed JSON payload: ' . $jsonException->getMessage(), 0, $jsonException);
+                throw new RuntimeException(
+                    'Malformed JSON payload: ' . $jsonException->getMessage(),
+                    0,
+                    $jsonException
+                );
             }
         }
 
