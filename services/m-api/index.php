@@ -1,9 +1,13 @@
 <?php
 
 declare(strict_types=1);
-
-require_once __DIR__ . '/UserAuthService.php';
-require_once __DIR__ . '/BillingService.php';
+// Explicitly load local service classes for deployments without Composer autoloading.
+foreach ([
+    'UserAuthService.php',
+    'BillingService.php',
+] as $dependency) {
+    require_once __DIR__ . '/' . $dependency;
+}
 
 use LSE\Services\MApi\UserAuthService;
 use LSE\Services\MApi\BillingService;
