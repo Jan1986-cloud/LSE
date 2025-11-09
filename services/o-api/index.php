@@ -2,9 +2,18 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/tools/TokenUsageAggregator.php';
-require_once __DIR__ . '/tools/ResearchTool.php';
-require_once __DIR__ . '/tools/JsonValidatorTool.php';
+// Ensure tool classes are available even when Composer autoloading is unavailable in production.
+foreach ([
+    'tools/TokenUsageAggregator.php',
+    'tools/ResearchTool.php',
+    'tools/JsonValidatorTool.php',
+] as $dependency) {
+    require_once __DIR__ . '/' . $dependency;
+}
+
+use LSE\Services\OApi\Tools\TokenUsageAggregator;
+use LSE\Services\OApi\Tools\ResearchTool;
+use LSE\Services\OApi\Tools\JsonValidatorTool;
 
 $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = parse_url($requestUri, PHP_URL_PATH) ?? '/';

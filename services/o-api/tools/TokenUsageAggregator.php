@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace LSE\Services\OApi\Tools;
 
+use PDO;
+use PDOException;
+use JsonException;
+use RuntimeException;
+
 final class TokenUsageAggregator
 {
     private PDO $pdo;

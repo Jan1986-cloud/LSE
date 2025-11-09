@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace LSE\Services\OApi\Tools;
 
+use PDO;
+use PDOException;
+use RuntimeException;
+
 final class ResearchTool
 {
     private PDO $pdo;
