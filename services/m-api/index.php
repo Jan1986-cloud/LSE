@@ -61,18 +61,24 @@ try {
 
         case '/ping-o-api':
             enforceAllowedMethod($method, ['GET']);
-            $oApiResponse = checkOApiConnectivity();
-            if ($oApiResponse['status'] === 'pass') {
+            $connectivity = checkOApiConnectivity();
+            if ($connectivity['ok']) {
                 respondJson(200, [
                     'status' => 'success',
-                    'message' => 'O-API connectivity test passed',
-                    'o_api_response' => $oApiResponse['details']
+                    'message' => 'O-API connectivity test passed.',
+                    'o_api_response' => [
+                        'http_status' => $connectivity['http_status'],
+                        'response_body' => $connectivity['response_body'],
+                        'attempted_url' => $connectivity['attempted_url'],
+                    ],
                 ]);
             } else {
                 respondJson(503, [
-                    'status' => 'failed',
-                    'message' => 'O-API connectivity test failed',
-                    'error' => $oApiResponse['details']
+                    'status' => 'error',
+                    'message' => 'O-API connection failed.',
+                    'error_details' => $connectivity['error_details'],
+                    'attempted_url' => $connectivity['attempted_url'],
+                    'http_status' => $connectivity['http_status'],
                 ]);
             }
             break;
@@ -256,14 +262,19 @@ function respondHealth(PDO $pdo): void
         return;
     }
 
-    [$oApiStatus, $oApiDetails] = checkOApiConnectivity();
+    $connectivity = checkOApiConnectivity();
 
-    $statusCode = $oApiStatus ? 200 : 502;
+    $statusCode = $connectivity['ok'] ? 200 : 502;
     respondJson($statusCode, [
-        'status' => $oApiStatus ? 'ok' : 'degraded',
+        'status' => $connectivity['ok'] ? 'ok' : 'degraded',
         'checks' => [
             'database' => 'pass',
-            'o-api' => $oApiStatus ? 'pass' : $oApiDetails,
+            'o-api' => $connectivity['ok'] ? 'pass' : 'error',
+        ],
+        'o_api_details' => [
+            'http_status' => $connectivity['http_status'],
+            'error_details' => $connectivity['error_details'],
+            'attempted_url' => $connectivity['attempted_url'],
         ],
     ]);
 }
@@ -295,9 +306,20 @@ function checkOApiConnectivity(): array
 {
     $port = resolveOApiPort();
     $url = 'http://' . O_API_INTERNAL_HOST . ':' . $port . '/health';
+
+    $result = [
+        'ok' => false,
+        'status' => 'error',
+        'attempted_url' => $url,
+        'http_status' => null,
+        'response_body' => null,
+        'error_details' => null,
+    ];
+
     $curlHandle = curl_init($url);
     if ($curlHandle === false) {
-        return [false, 'Failed to initialize cURL.'];
+        $result['error_details'] = 'Failed to initialize cURL.';
+        return $result;
     }
 
     curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
@@ -309,15 +331,27 @@ function checkOApiConnectivity(): array
     $status = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
     curl_close($curlHandle);
 
-    if ($response === false) {
-        return [false, $error !== '' ? $error : 'Unknown cURL error'];
+    if ($status !== false) {
+        $result['http_status'] = (int) $status;
     }
+
+    if ($response === false) {
+        $result['error_details'] = $error !== '' ? $error : 'Unknown cURL error.';
+        return $result;
+    }
+
+    $result['response_body'] = $response;
 
     if ($status >= 400 || $status === 0) {
-        return [false, 'Unexpected HTTP status ' . $status];
+        $result['error_details'] = 'Unexpected HTTP status ' . $status;
+        return $result;
     }
 
-    return [true, 'pass'];
+    $result['ok'] = true;
+    $result['status'] = 'pass';
+    $result['error_details'] = null;
+
+    return $result;
 }
 
 function logDatabaseEnv(): void
