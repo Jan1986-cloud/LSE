@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/UserAuthService.php';
 require_once __DIR__ . '/BillingService.php';
 
+use LSE\Services\MApi\UserAuthService;
+use LSE\Services\MApi\BillingService;
+
 const O_API_INTERNAL_HOST = 'o-api.railway.internal';
 const O_API_DEFAULT_PORT = 8080; // See TECHNICAL_DEBT.md entry P0-001 for context.
 
