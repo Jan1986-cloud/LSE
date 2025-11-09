@@ -7,10 +7,10 @@
   },
   "scripts": {
     "post-install-cmd": [
-      "php ../tools/copy_shared.php"
+      "php ../../tools/copy_shared.php"
     ],
     "post-update-cmd": [
-      "php ../tools/copy_shared.php"
+      "php ../../tools/copy_shared.php"
     ]
   },
   "config": {
