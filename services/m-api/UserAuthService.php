@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace LSE\Services\MApi;
 
+use PDO;
+use PDOException;
+use RuntimeException;
+use InvalidArgumentException;
+
 class UserAuthService
 {
     private PDO $pdo;

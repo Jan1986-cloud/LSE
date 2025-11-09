@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace LSE\Services\MApi;
 
+use PDO;
+use RuntimeException;
+
 class BillingService
 {
     private PDO $pdo;
