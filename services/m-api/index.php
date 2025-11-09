@@ -13,6 +13,8 @@ use LSE\Services\MApi\UserAuthService;
 use LSE\Services\MApi\BillingService;
 
 const O_API_INTERNAL_HOST = 'o-api.railway.internal';
+const O_API_PROBE_PORTS = [8080, 3000, 8000, 5000];
+const O_API_HTTP_TIMEOUT_MS = 750;
 
 header('Content-Type: application/json');
 
@@ -64,12 +66,10 @@ try {
             if ($connectivity['ok']) {
                 respondJson(200, [
                     'status' => 'success',
-                    'message' => 'O-API connectivity test passed.',
-                    'o_api_response' => [
-                        'http_status' => $connectivity['http_status'],
-                        'response_body' => $connectivity['response_body'],
-                        'attempted_url' => $connectivity['attempted_url'],
-                    ],
+                    'attempted_url' => $connectivity['attempted_url'],
+                    'http_status' => $connectivity['http_status'],
+                    'response_body' => $connectivity['response_body'],
+                    'discovery' => $connectivity['discovery'],
                 ]);
             } else {
                 respondJson(503, [
@@ -78,6 +78,7 @@ try {
                     'error_details' => $connectivity['error_details'],
                     'attempted_url' => $connectivity['attempted_url'],
                     'http_status' => $connectivity['http_status'],
+                    'discovery' => $connectivity['discovery'],
                 ]);
             }
             break;
@@ -273,6 +274,7 @@ function respondHealth(PDO $pdo): void
             'http_status' => $connectivity['http_status'],
             'attempted_url' => $connectivity['attempted_url'],
             'error_details' => $connectivity['error_details'],
+            'discovery' => $connectivity['discovery'],
         ],
     ];
 
@@ -285,102 +287,178 @@ function respondHealth(PDO $pdo): void
 
 function checkOApiConnectivity(): array
 {
-    $rawPort = getenv('O_API_INTERNAL_PORT');
-    $attemptedUrl = 'http://' . O_API_INTERNAL_HOST . ':<port=undefined>/health';
+    $plan = buildOApiDiscoveryPlan();
+    $attemptedPorts = [];
+    $lastFailure = null;
 
-    if ($rawPort === false || trim($rawPort) === '') {
-        return [
-            'ok' => false,
-            'status' => 'error',
-            'http_status' => 0,
-            'response_body' => null,
-            'error_details' => 'invalid_internal_port',
-            'attempted_url' => $attemptedUrl,
-        ];
+    foreach ($plan['candidates'] as $port) {
+        $attemptedPorts[] = $port;
+        $result = attemptOApiHealth($port);
+
+        if ($result['ok']) {
+            return [
+                'ok' => true,
+                'http_status' => $result['http_status'],
+                'attempted_url' => $result['url'],
+                'response_body' => $result['body'],
+                'error_details' => null,
+                'discovery' => [
+                    'strategy' => $plan['strategy'],
+                    'candidates' => $attemptedPorts,
+                ],
+            ];
+        }
+
+        $lastFailure = $result;
     }
 
-    $portString = trim($rawPort);
-    if (!ctype_digit($portString)) {
-        return [
-            'ok' => false,
-            'status' => 'error',
-            'http_status' => 0,
-            'response_body' => null,
-            'error_details' => 'invalid_internal_port',
-            'attempted_url' => 'http://' . O_API_INTERNAL_HOST . ':<port=' . $portString . '>/health',
-        ];
+    $attemptedUrl = $lastFailure['url'] ?? 'http://' . O_API_INTERNAL_HOST . ':<port=undefined>/health';
+    $httpStatus = $lastFailure['http_status'] ?? 0;
+    $errorDetails = $lastFailure['error'] ?? null;
+
+    if ($plan['cause'] === 'env_invalid' && ($errorDetails === null || $errorDetails === '')) {
+        $errorDetails = 'invalid_internal_port';
     }
 
-    $port = (int) $portString;
-    if ($port <= 0 || $port > 65535) {
-        return [
-            'ok' => false,
-            'status' => 'error',
-            'http_status' => 0,
-            'response_body' => null,
-            'error_details' => 'invalid_internal_port',
-            'attempted_url' => 'http://' . O_API_INTERNAL_HOST . ':<port=' . $portString . '>/health',
-        ];
+    if ($errorDetails === null || $errorDetails === '') {
+        $errorDetails = 'timeout';
+    } else {
+        $lower = strtolower($errorDetails);
+        if (str_contains($lower, 'invalid')) {
+            $errorDetails = 'invalid_internal_port';
+        } elseif (str_contains($lower, 'timed out') || str_contains($lower, 'timeout')) {
+            $errorDetails = 'timeout';
+        }
     }
 
+    return [
+        'ok' => false,
+        'http_status' => $httpStatus,
+        'attempted_url' => $attemptedUrl,
+        'response_body' => $lastFailure['body'] ?? null,
+        'error_details' => $errorDetails,
+        'discovery' => [
+            'strategy' => $plan['strategy'],
+            'candidates' => $attemptedPorts,
+        ],
+    ];
+}
+
+function buildOApiDiscoveryPlan(): array
+{
+    $fallbackPorts = O_API_PROBE_PORTS;
+    $plan = [
+        'strategy' => 'probe',
+        'candidates' => [],
+        'cause' => 'env_missing',
+    ];
+
+    $raw = getenv('O_API_INTERNAL_PORT');
+    $envPort = null;
+
+    if ($raw !== false) {
+        $trimmed = trim($raw);
+        if ($trimmed === '') {
+            $plan['cause'] = 'env_missing';
+        } elseif ($trimmed === '$PORT') {
+            $plan['cause'] = 'literal_port';
+        } elseif (ctype_digit($trimmed)) {
+            $portValue = (int) $trimmed;
+            if ($portValue > 0 && $portValue <= 65535) {
+                $plan['strategy'] = 'env';
+                $plan['cause'] = 'env_valid';
+                $envPort = $portValue;
+            } else {
+                $plan['cause'] = 'env_invalid';
+            }
+        } else {
+            $plan['cause'] = 'env_invalid';
+        }
+    }
+
+    if ($envPort !== null) {
+        $plan['candidates'][] = $envPort;
+    } else {
+        $plan['strategy'] = 'probe';
+    }
+
+    foreach ($fallbackPorts as $port) {
+        if (!in_array($port, $plan['candidates'], true)) {
+            $plan['candidates'][] = $port;
+        }
+    }
+
+    return $plan;
+}
+
+function attemptOApiHealth(int $port): array
+{
     $url = 'http://' . O_API_INTERNAL_HOST . ':' . $port . '/health';
+    $handle = curl_init($url);
 
-    $curlHandle = curl_init($url);
-    if ($curlHandle === false) {
+    if ($handle === false) {
         return [
             'ok' => false,
-            'status' => 'error',
             'http_status' => 0,
-            'response_body' => null,
-            'error_details' => 'Failed to initialize cURL.',
-            'attempted_url' => $url,
+            'body' => null,
+            'error' => 'Failed to initialize cURL.',
+            'url' => $url,
         ];
     }
 
-    curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($curlHandle, CURLOPT_TIMEOUT, 3);
-    curl_setopt($curlHandle, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($handle, CURLOPT_FOLLOWLOCATION, false);
 
-    $response = curl_exec($curlHandle);
-    $curlError = curl_error($curlHandle);
-    $status = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
-    curl_close($curlHandle);
+    if (defined('CURLOPT_TIMEOUT_MS')) {
+        curl_setopt($handle, CURLOPT_TIMEOUT_MS, O_API_HTTP_TIMEOUT_MS);
+        curl_setopt($handle, CURLOPT_CONNECTTIMEOUT_MS, O_API_HTTP_TIMEOUT_MS);
+    } else {
+        $timeoutSeconds = (int) max(1, ceil(O_API_HTTP_TIMEOUT_MS / 1000));
+        curl_setopt($handle, CURLOPT_TIMEOUT, $timeoutSeconds);
+        curl_setopt($handle, CURLOPT_CONNECTTIMEOUT, $timeoutSeconds);
+    }
+
+    $response = curl_exec($handle);
+    $curlError = curl_error($handle);
+    $status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+    curl_close($handle);
 
     $httpStatus = $status !== false ? (int) $status : 0;
 
     if ($response === false) {
         return [
             'ok' => false,
-            'status' => 'error',
             'http_status' => $httpStatus,
-            'response_body' => null,
-            'error_details' => $curlError !== '' ? $curlError : 'Unknown cURL error.',
-            'attempted_url' => $url,
+            'body' => null,
+            'error' => $curlError !== '' ? $curlError : 'timeout',
+            'url' => $url,
         ];
     }
 
-    $trimmedBody = trim($response);
-    $bodySnippet = $trimmedBody === '' ? '' : mb_substr($trimmedBody, 0, 120);
+    $trimmed = trim($response);
+    $snippet = $trimmed === '' ? '' : mb_substr($trimmed, 0, 120);
 
-    if ($httpStatus < 200 || $httpStatus >= 300) {
-        $snippet = $bodySnippet !== '' ? $bodySnippet : '(empty response)';
+    if ($httpStatus >= 200 && $httpStatus < 300) {
         return [
-            'ok' => false,
-            'status' => 'error',
+            'ok' => true,
             'http_status' => $httpStatus,
-            'response_body' => $bodySnippet,
-            'error_details' => 'HTTP ' . $httpStatus . ' response: ' . $snippet,
-            'attempted_url' => $url,
+            'body' => $snippet,
+            'error' => null,
+            'url' => $url,
         ];
+    }
+
+    $error = 'HTTP ' . $httpStatus . ' response';
+    if ($snippet !== '') {
+        $error .= ': ' . $snippet;
     }
 
     return [
-        'ok' => true,
-        'status' => 'pass',
+        'ok' => false,
         'http_status' => $httpStatus,
-        'response_body' => $bodySnippet,
-        'error_details' => null,
-        'attempted_url' => $url,
+        'body' => $snippet,
+        'error' => $error,
+        'url' => $url,
     ];
 }
 

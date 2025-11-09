@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$rawPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+$normalisedPath = rtrim($rawPath, '/');
+if ($normalisedPath === '') {
+    $normalisedPath = '/';
+}
 
 if ($method !== 'GET') {
     header('Allow: GET');
@@ -11,7 +15,7 @@ if ($method !== 'GET') {
     exit;
 }
 
-switch ($path) {
+switch ($normalisedPath) {
     case '/health':
         respondJson(200, ['status' => 'ok', 'service' => 'o-api']);
         break;
