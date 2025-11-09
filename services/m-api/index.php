@@ -13,12 +13,7 @@ use LSE\Services\MApi\UserAuthService;
 use LSE\Services\MApi\BillingService;
 
 const O_API_INTERNAL_HOST = 'o-api.railway.internal';
-const O_API_PROBE_PORTS = [8080, 3000, 8000, 5000];
-const O_API_HTTP_TIMEOUT_MS = 750;
-
-header('Content-Type: application/json');
-
-logDatabaseEnv();
+const O_API_HTTP_TIMEOUT_MS = 1000;
 
 try {
     $pdo = createDatabaseConnection();
@@ -68,8 +63,6 @@ try {
                     'status' => 'success',
                     'attempted_url' => $connectivity['attempted_url'],
                     'http_status' => $connectivity['http_status'],
-                    'response_body' => $connectivity['response_body'],
-                    'discovery' => $connectivity['discovery'],
                 ]);
             } else {
                 respondJson(503, [
@@ -78,7 +71,6 @@ try {
                     'error_details' => $connectivity['error_details'],
                     'attempted_url' => $connectivity['attempted_url'],
                     'http_status' => $connectivity['http_status'],
-                    'discovery' => $connectivity['discovery'],
                 ]);
             }
             break;
@@ -197,7 +189,7 @@ function getAuthorizationHeader(): ?string
 function respondJson(int $statusCode, array $payload): void
 {
     http_response_code($statusCode);
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=UTF-8');
     $encoded = json_encode($payload, JSON_UNESCAPED_SLASHES);
     if ($encoded === false) {
         http_response_code(500);
@@ -253,18 +245,16 @@ function createDatabaseConnection(): PDO
 function respondHealth(PDO $pdo): void
 {
     $databaseStatus = 'pass';
-    $databaseError = null;
 
     try {
         $pdo->query('SELECT 1');
     } catch (PDOException $e) {
         $databaseStatus = 'fail';
-        $databaseError = $e->getMessage();
     }
 
     $connectivity = checkOApiConnectivity();
 
-    $payload = [
+    respondJson(200, [
         'status' => ($databaseStatus === 'pass' && $connectivity['ok']) ? 'ok' : 'degraded',
         'checks' => [
             'database' => $databaseStatus,
@@ -274,135 +264,55 @@ function respondHealth(PDO $pdo): void
             'http_status' => $connectivity['http_status'],
             'attempted_url' => $connectivity['attempted_url'],
             'error_details' => $connectivity['error_details'],
-            'discovery' => $connectivity['discovery'],
         ],
-    ];
-
-    if ($databaseError !== null) {
-        $payload['database_error'] = $databaseError;
-    }
-
-    respondJson(200, $payload);
+    ]);
 }
 
+/**
+ * @return array{ok:bool,http_status:int,attempted_url:string,error_details:?string}
+ */
 function checkOApiConnectivity(): array
 {
-    $plan = buildOApiDiscoveryPlan();
-    $attemptedPorts = [];
-    $lastFailure = null;
+    $rawPort = getenv('O_API_INTERNAL_PORT');
+    $normalized = $rawPort === false ? null : trim((string) $rawPort);
 
-    foreach ($plan['candidates'] as $port) {
-        $attemptedPorts[] = $port;
-        $result = attemptOApiHealth($port);
-
-        if ($result['ok']) {
-            return [
-                'ok' => true,
-                'http_status' => $result['http_status'],
-                'attempted_url' => $result['url'],
-                'response_body' => $result['body'],
-                'error_details' => null,
-                'discovery' => [
-                    'strategy' => $plan['strategy'],
-                    'candidates' => $attemptedPorts,
-                ],
-            ];
-        }
-
-        $lastFailure = $result;
+    if ($normalized === null || $normalized === '') {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'attempted_url' => buildOApiUrl(null, $normalized),
+            'error_details' => 'invalid_internal_port',
+        ];
     }
 
-    $attemptedUrl = $lastFailure['url'] ?? 'http://' . O_API_INTERNAL_HOST . ':<port=undefined>/health';
-    $httpStatus = $lastFailure['http_status'] ?? 0;
-    $errorDetails = $lastFailure['error'] ?? null;
-
-    if ($plan['cause'] === 'env_invalid' && ($errorDetails === null || $errorDetails === '')) {
-        $errorDetails = 'invalid_internal_port';
+    if (!ctype_digit($normalized)) {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'attempted_url' => buildOApiUrl(null, $normalized),
+            'error_details' => 'invalid_internal_port',
+        ];
     }
 
-    if ($errorDetails === null || $errorDetails === '') {
-        $errorDetails = 'timeout';
-    } else {
-        $lower = strtolower($errorDetails);
-        if (str_contains($lower, 'invalid')) {
-            $errorDetails = 'invalid_internal_port';
-        } elseif (str_contains($lower, 'timed out') || str_contains($lower, 'timeout')) {
-            $errorDetails = 'timeout';
-        }
+    $port = (int) $normalized;
+    if ($port < 1 || $port > 65535) {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'attempted_url' => buildOApiUrl(null, $normalized),
+            'error_details' => 'invalid_internal_port',
+        ];
     }
 
-    return [
-        'ok' => false,
-        'http_status' => $httpStatus,
-        'attempted_url' => $attemptedUrl,
-        'response_body' => $lastFailure['body'] ?? null,
-        'error_details' => $errorDetails,
-        'discovery' => [
-            'strategy' => $plan['strategy'],
-            'candidates' => $attemptedPorts,
-        ],
-    ];
-}
-
-function buildOApiDiscoveryPlan(): array
-{
-    $fallbackPorts = O_API_PROBE_PORTS;
-    $plan = [
-        'strategy' => 'probe',
-        'candidates' => [],
-        'cause' => 'env_missing',
-    ];
-
-    $raw = getenv('O_API_INTERNAL_PORT');
-    $envPort = null;
-
-    if ($raw !== false) {
-        $trimmed = trim($raw);
-        if ($trimmed === '') {
-            $plan['cause'] = 'env_missing';
-        } elseif ($trimmed === '$PORT') {
-            $plan['cause'] = 'literal_port';
-        } elseif (ctype_digit($trimmed)) {
-            $portValue = (int) $trimmed;
-            if ($portValue > 0 && $portValue <= 65535) {
-                $plan['strategy'] = 'env';
-                $plan['cause'] = 'env_valid';
-                $envPort = $portValue;
-            } else {
-                $plan['cause'] = 'env_invalid';
-            }
-        } else {
-            $plan['cause'] = 'env_invalid';
-        }
-    }
-
-    if ($envPort !== null) {
-        $plan['candidates'][] = $envPort;
-    } else {
-        $plan['strategy'] = 'probe';
-    }
-
-    foreach ($fallbackPorts as $port) {
-        if (!in_array($port, $plan['candidates'], true)) {
-            $plan['candidates'][] = $port;
-        }
-    }
-
-    return $plan;
-}
-
-function attemptOApiHealth(int $port): array
-{
-    $url = 'http://' . O_API_INTERNAL_HOST . ':' . $port . '/health';
+    $url = buildOApiUrl($port, null);
     $handle = curl_init($url);
 
     if ($handle === false) {
         return [
             'ok' => false,
             'http_status' => 0,
-            'body' => null,
-            'error' => 'Failed to initialize cURL.',
-            'url' => $url,
+            'attempted_url' => $url,
+            'error_details' => 'timeout',
         ];
     }
 
@@ -419,7 +329,6 @@ function attemptOApiHealth(int $port): array
     }
 
     $response = curl_exec($handle);
-    $curlError = curl_error($handle);
     $status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
     curl_close($handle);
 
@@ -428,49 +337,45 @@ function attemptOApiHealth(int $port): array
     if ($response === false) {
         return [
             'ok' => false,
-            'http_status' => $httpStatus,
-            'body' => null,
-            'error' => $curlError !== '' ? $curlError : 'timeout',
-            'url' => $url,
+            'http_status' => 0,
+            'attempted_url' => $url,
+            'error_details' => 'timeout',
         ];
     }
-
-    $trimmed = trim($response);
-    $snippet = $trimmed === '' ? '' : mb_substr($trimmed, 0, 120);
 
     if ($httpStatus >= 200 && $httpStatus < 300) {
         return [
             'ok' => true,
             'http_status' => $httpStatus,
-            'body' => $snippet,
-            'error' => null,
-            'url' => $url,
+            'attempted_url' => $url,
+            'error_details' => null,
         ];
-    }
-
-    $error = 'HTTP ' . $httpStatus . ' response';
-    if ($snippet !== '') {
-        $error .= ': ' . $snippet;
     }
 
     return [
         'ok' => false,
-        'http_status' => $httpStatus,
-        'body' => $snippet,
-        'error' => $error,
-        'url' => $url,
+        'http_status' => $httpStatus > 0 ? $httpStatus : 0,
+        'attempted_url' => $url,
+        'error_details' => 'http_error',
     ];
 }
 
-function logDatabaseEnv(): void
+function buildOApiUrl(?int $port, ?string $rawPort): string
 {
-    static $logged = false;
-    if ($logged) {
-        return;
+    if ($port !== null) {
+        return sprintf('http://%s:%d/health', O_API_INTERNAL_HOST, $port);
     }
 
-    $logged = true;
-    $databaseUrl = getenv('DATABASE_URL');
-    $status = ($databaseUrl !== false && $databaseUrl !== '') ? 'detected' : 'absent';
-    error_log('[m-api] env:DATABASE_URL ' . $status);
+    $suffix = $rawPort ?? '';
+    $suffix = trim($suffix);
+    if ($suffix === '') {
+        $suffix = '0';
+    }
+
+    $sanitised = preg_replace('/[^0-9]/', '', $suffix);
+    if ($sanitised === null || $sanitised === '') {
+        $sanitised = '0';
+    }
+
+    return sprintf('http://%s:%s/health', O_API_INTERNAL_HOST, $sanitised);
 }

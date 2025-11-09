@@ -32,7 +32,7 @@ switch ($normalisedPath) {
 function respondJson(int $statusCode, array $payload): void
 {
     http_response_code($statusCode);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
 
     $encoded = json_encode($payload, JSON_UNESCAPED_SLASHES);
     if ($encoded === false) {
