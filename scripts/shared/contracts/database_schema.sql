@@ -39,8 +39,7 @@ CREATE TABLE IF NOT EXISTS cms_user_billing_plans (
     user_id BIGINT NOT NULL REFERENCES cms_users(id) ON DELETE CASCADE,
     billing_plan_id BIGINT NOT NULL REFERENCES cms_billing_plans(id) ON DELETE RESTRICT,
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    active BOOLEAN NOT NULL DEFAULT TRUE,
-    CONSTRAINT unique_active_plan UNIQUE (user_id) WHERE active = TRUE
+    active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS cms_blueprints (
@@ -173,3 +172,7 @@ CREATE INDEX IF NOT EXISTS idx_token_logs_orchestration ON cms_token_logs(orches
 CREATE INDEX IF NOT EXISTS idx_analytics_event_type ON cms_analytics_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_agent_detections_agent_name ON cms_agent_detections(agent_name);
 CREATE INDEX IF NOT EXISTS idx_content_suggestions_status ON cms_content_suggestions(status);
+
+-- Partial unique index to ensure only one active billing plan per user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_billing_plans_active_unique 
+ON cms_user_billing_plans(user_id) WHERE active = TRUE;
