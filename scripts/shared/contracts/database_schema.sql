@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS cms_user_billing_plans (
     billing_plan_id BIGINT NOT NULL REFERENCES cms_billing_plans(id) ON DELETE RESTRICT,
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (user_id, active) WHERE active
+    CONSTRAINT unique_active_plan UNIQUE (user_id) WHERE active = TRUE
 );
 
 CREATE TABLE IF NOT EXISTS cms_blueprints (
