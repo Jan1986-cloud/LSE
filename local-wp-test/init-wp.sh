@@ -5,23 +5,37 @@ set -euo pipefail
 /usr/local/bin/docker-entrypoint.sh apache2-foreground &
 APACHE_PID=$!
 
-cleanup() {
-  if kill -0 "$APACHE_PID" 2>/dev/null; then
-    kill "$APACHE_PID"
-    wait "$APACHE_PID"
-  fi
-}
-
-trap cleanup EXIT INT TERM
+trap 'kill -TERM "$APACHE_PID"; wait "$APACHE_PID"' INT TERM
 
 # Wait for MySQL to be ready before running WP-CLI commands.
-until mysqladmin ping -h"${WORDPRESS_DB_HOST%%:*}" --silent; do
+until mysqladmin ping \
+  -h"${WORDPRESS_DB_HOST%%:*}" \
+  -u"${WORDPRESS_DB_USER}" \
+  -p"${WORDPRESS_DB_PASSWORD}" \
+  --skip-ssl \
+  --skip-ssl-verify-server-cert \
+  --silent >/dev/null 2>&1; do
   echo "Waiting for database..."
   sleep 2
 done
 
 WP_PATH="/var/www/html"
+
+until [ -f "$WP_PATH/wp-includes/version.php" ]; do
+  echo "Waiting for WordPress files..."
+  sleep 2
+done
+
 cd "$WP_PATH"
+
+if [ ! -f "wp-config.php" ]; then
+  wp config create --allow-root \
+    --dbname="$WORDPRESS_DB_NAME" \
+    --dbuser="$WORDPRESS_DB_USER" \
+    --dbpass="$WORDPRESS_DB_PASSWORD" \
+    --dbhost="$WORDPRESS_DB_HOST" \
+    --skip-check
+fi
 
 # Ensure WordPress is installed.
 if ! wp core is-installed --allow-root; then
@@ -48,7 +62,7 @@ ensure_post() {
   local title="$1"
   local content="$2"
   local slug
-  slug=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed "s/[^a-z0-9\- ]//g" | tr ' ' '-')
+  slug=$(echo "$title" | iconv -c -t ascii//TRANSLIT | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]//g' | tr -s ' ' '-')
 
   if ! wp post list --allow-root --post_type=post --name="$slug" --format=ids | grep -qE '^[0-9]+$'; then
     wp post create --allow-root \

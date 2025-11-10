@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   db:
     image: mysql:8.0
@@ -13,11 +11,17 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - wpnet
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   wordpress:
     build: .
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8080:80"
     environment:
