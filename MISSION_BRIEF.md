@@ -91,6 +91,24 @@ curl_close($handle);
 
 ---
 
+## Phase 4 Field Report ⚙️
+
+**Status:** IN FLIGHT (November 10, 2025)
+
+**C-API Delivery Enhancements:**
+- `/content/{id}` endpoint online with deterministic lookup by external reference or numeric ID, returning orchestration payloads plus metadata; response headers now advertise `X-Response-Time` to enforce the <150 ms SLO.
+- Delivery requests trigger asynchronous analytics beacons to A-API (fire-and-forget cURL with 200 ms cap) capturing latency, blueprint, and site context for each view without blocking the client.
+- PHPUnit coverage (`composer test`) validates repository hydration logic and telemetry dispatch hooks via injectable reporters.
+
+**A-API Analytics Ingestion:**
+- `/analytics/ingest` POST endpoint operational with schema validation, ISO-8601 coercion, and batched persistence into `cms_analytics_log`.
+- IP anonymization implemented via HMAC hashing before storage; raw IP is dropped to satisfy privacy requirements while preserving deduplication capability.
+- PHPUnit coverage verifies persistence path and validation guardrails (missing events, anonymized metadata).
+
+**Next:** Wire A-API detections back into C-API adaptive delivery (`/analytics/agent-detections`), introduce queue-backed async ingestion under higher load, and add smoke tests hitting Railway Deploy targets to measure end-to-end latency.
+
+---
+
 ### 1. Mission Objective
 
 Our objective is to transition the existing monolithic AI Content Generator into a scalable, cloud-native, headless SaaS platform hosted on Railway.app. We are decoupling the powerful AI orchestration logic from the WordPress-specific infrastructure to create a highly maintainable and commercially scalable product.
