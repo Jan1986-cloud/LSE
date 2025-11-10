@@ -62,6 +62,19 @@ curl_close($handle);
 
 **Next:** Harden production DB migrations and extend integration tests once O-API token logging (Phase 2) is available.
 
+## Phase 2 Progress Update 🧭
+
+**Status:** IN FLIGHT (November 10, 2025)
+
+**Highlights:**
+
+1. O-API toolchain refactored with dependency-injected helpers: `WritingTool` (LLM execution) and `ResearchTool` (HTML provenance capture) now reside in `services/o-api/tools/`.
+2. Centralized `TokenUsageAggregator` logs prompt/completion totals, workflow IDs, and metadata into `cms_token_logs`, enabling M-API billing precision.
+3. Provenance requirements met via HTML snapshot storage (checksum + timestamp) for every researched source, conforming to `cms_sources` contract.
+4. PHPUnit suite established for O-API with in-memory PDO stubs; coverage verifies token logging, JSON repair heuristics, and provenance persistence without external calls.
+
+**Next:** Integrate the new O-API tools into the orchestration workflows and validate against live Railway PostgreSQL before closing the Phase 2 gate.
+
 ---
 
 ### 1. Mission Objective
