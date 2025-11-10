@@ -1,6 +1,7 @@
 # Dependencies
 /vendor/
 */vendor/
+**/vendor/
 node_modules/
 
 # Environment files
@@ -25,6 +26,8 @@ logs/
 # Cache directories
 .cache/
 .tmp/
+**/.phpunit.result.cache
+services/*/shared/
 
 # Build outputs
 /build/

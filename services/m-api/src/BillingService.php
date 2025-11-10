@@ -42,30 +42,34 @@ class BillingService
         ];
     }
 
-    public function calculateCost(int $tokenCount, int $planId): float
+    public function calculateCost(int $tokenCount, int $planId, ?array $planOverride = null): float
     {
-        $plan = $this->fetchPlanById($planId);
+        $plan = $planOverride ?? $this->fetchPlanById($planId);
         if ($plan === null) {
             throw new RuntimeException('Billing plan not found.');
         }
 
-        $tiers = $this->decodeTiers($plan['tier_thresholds']);
+        $tiers = $this->decodeTiers((string) $plan['tier_thresholds']);
+        $baseRate = (float) $plan['base_rate'];
+        $overageMultiplier = (float) ($plan['overage_multiplier'] ?? 1.0);
+
         if ($tiers === []) {
-            $baseRate = (float) $plan['base_rate'];
             return round($tokenCount * $baseRate, 6);
         }
+
         $totalCost = 0.0;
         $remainingTokens = $tokenCount;
-        $previousThreshold = 0;
+        $processed = 0;
 
         foreach ($tiers as $tier) {
-            $pricePerToken = (float) ($tier['price_per_token'] ?? $plan['base_rate']);
-            $upperBound = isset($tier['upto']) ? (int) $tier['upto'] : null;
+            $pricePerToken = (float) ($tier['price_per_token'] ?? $baseRate);
+            $upperBound = $tier['upto'] ?? null;
 
             if ($upperBound !== null) {
-                $tokensInTier = max(min($tokenCount, $upperBound) - $previousThreshold, 0);
+                $tierCapacity = max($upperBound - $processed, 0);
+                $tokensInTier = min($tierCapacity, $remainingTokens);
             } else {
-                $tokensInTier = max($tokenCount - $previousThreshold, 0);
+                $tokensInTier = $remainingTokens;
             }
 
             if ($tokensInTier <= 0) {
@@ -74,24 +78,26 @@ class BillingService
 
             $totalCost += $tokensInTier * $pricePerToken;
             $remainingTokens -= $tokensInTier;
-            $previousThreshold += $tokensInTier;
+            $processed += $tokensInTier;
 
-            if ($upperBound === null) {
+            if ($remainingTokens <= 0) {
                 break;
             }
         }
 
         if ($remainingTokens > 0) {
-            $overageMultiplier = (float) $plan['overage_multiplier'];
-            $totalCost += $remainingTokens * (float) $plan['base_rate'] * $overageMultiplier;
+            $totalCost += $remainingTokens * $baseRate * $overageMultiplier;
         }
 
         return round($totalCost, 6);
     }
 
-    private function fetchActivePlan(int $userId): ?array
+    /**
+     * @return array{plan_code:string,display_name:string,id:int}|null
+     */
+    protected function fetchActivePlan(int $userId): ?array
     {
-        $sql = 'SELECT bp.* 
+        $sql = 'SELECT bp.id, bp.plan_code, bp.display_name 
                 FROM cms_user_billing_plans ubp 
                 JOIN cms_billing_plans bp ON bp.id = ubp.billing_plan_id 
                 WHERE ubp.user_id = :user_id AND ubp.active = TRUE 
@@ -103,16 +109,19 @@ class BillingService
         return $plan === false ? null : $plan;
     }
 
-    private function fetchPlanById(int $planId): ?array
+    /**
+     * @return array{base_rate:float,tier_thresholds:string,overage_multiplier:float}|null
+     */
+    protected function fetchPlanById(int $planId): ?array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM cms_billing_plans WHERE id = :id');
+        $stmt = $this->pdo->prepare('SELECT base_rate, tier_thresholds, overage_multiplier FROM cms_billing_plans WHERE id = :id');
         $stmt->execute(['id' => $planId]);
         $plan = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $plan === false ? null : $plan;
     }
 
-    private function fetchTokenUsage(int $userId): int
+    protected function fetchTokenUsage(int $userId): int
     {
         $stmt = $this->pdo->prepare(
             'SELECT COALESCE(SUM(tokens_used), 0) AS total_tokens 
@@ -128,7 +137,7 @@ class BillingService
     /**
      * @return list<array{price_per_token:float,upto?:int}>
      */
-    private function decodeTiers(string $rawTiers): array
+    protected function decodeTiers(string $rawTiers): array
     {
         $decoded = json_decode($rawTiers, true);
         if (!is_array($decoded) || $decoded === []) {
@@ -142,11 +151,11 @@ class BillingService
         });
 
         return array_map(static function (array $tier): array {
-            $price = isset($tier['price_per_token']) ? (float) $tier['price_per_token'] : 0.0;
-            $result = ['price_per_token' => $price];
+            $result = ['price_per_token' => (float) ($tier['price_per_token'] ?? 0.0)];
             if (isset($tier['upto'])) {
                 $result['upto'] = (int) $tier['upto'];
             }
+
             return $result;
         }, $decoded);
     }

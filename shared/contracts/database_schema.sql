@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS cms_api_keys (
     last_four TEXT NOT NULL,
     expires_at TIMESTAMPTZ,
     last_used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS cms_billing_plans (
@@ -165,6 +166,7 @@ CREATE TABLE IF NOT EXISTS cms_content_items (
 
 -- Supporting indexes for performance-sensitive queries
 CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON cms_api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_revoked ON cms_api_keys(user_id) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_blueprints_user_id ON cms_blueprints(user_id);
 CREATE INDEX IF NOT EXISTS idx_site_context_user ON cms_site_context(user_id);
 CREATE INDEX IF NOT EXISTS idx_token_logs_user_time ON cms_token_logs(user_id, logged_at DESC);
@@ -176,3 +178,25 @@ CREATE INDEX IF NOT EXISTS idx_content_suggestions_status ON cms_content_suggest
 -- Partial unique index to ensure only one active billing plan per user
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_billing_plans_active_unique 
 ON cms_user_billing_plans(user_id) WHERE active = TRUE;
+
+-- Ensure new columns exist when schema already applied
+ALTER TABLE cms_api_keys
+    ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+
+-- Seed default billing plan for new registrations
+INSERT INTO cms_billing_plans (plan_code, display_name, description, base_rate, tier_thresholds, overage_multiplier)
+VALUES (
+    'starter',
+    'Starter Plan',
+    'Default entry plan with graduated token pricing.',
+    0.0008,
+    '[{"upto":100000,"price_per_token":0.0008},{"upto":1000000,"price_per_token":0.0006},{"price_per_token":0.0005}]',
+    1.2500
+)
+ON CONFLICT (plan_code) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    description = EXCLUDED.description,
+    base_rate = EXCLUDED.base_rate,
+    tier_thresholds = EXCLUDED.tier_thresholds,
+    overage_multiplier = EXCLUDED.overage_multiplier,
+    updated_at = NOW();

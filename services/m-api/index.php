@@ -1,20 +1,29 @@
 <?php
 
 declare(strict_types=1);
-// Explicitly load local service classes for deployments without Composer autoloading.
-foreach ([
-    'UserAuthService.php',
-    'BillingService.php',
-] as $dependency) {
-    require_once __DIR__ . '/' . $dependency;
+
+$autoloadPath = __DIR__ . '/vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require $autoloadPath;
+} else {
+    foreach ([
+        'src/UserAuthService.php',
+        'src/BillingService.php',
+        'src/AuthGuard.php',
+        'src/Exceptions/UnauthorizedException.php',
+        'src/Exceptions/ForbiddenException.php',
+    ] as $dependency) {
+        require_once __DIR__ . '/' . $dependency;
+    }
 }
 
-use LSE\Services\MApi\UserAuthService;
+use LSE\Services\MApi\AuthGuard;
 use LSE\Services\MApi\BillingService;
+use LSE\Services\MApi\Exceptions\ForbiddenException;
+use LSE\Services\MApi\Exceptions\UnauthorizedException;
+use LSE\Services\MApi\UserAuthService;
 
-const O_API_INTERNAL_HOST = 'o-api.railway.internal';
 const O_API_HTTP_TIMEOUT_MS = 1000;
-const O_API_PROBE_PORTS = [8080, 3000, 8000, 5000];
 
 try {
     $pdo = createDatabaseConnection();
@@ -28,22 +37,40 @@ try {
 
 $authService = new UserAuthService($pdo);
 $billingService = new BillingService($pdo);
+$authGuard = new AuthGuard($authService);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
 try {
+    if (preg_match('#^/auth/api-keys/(\d+)$#', $path, $matches) === 1) {
+        $apiKeyId = (int) $matches[1];
+        enforceAllowedMethod($method, ['DELETE']);
+        $authContext = requireAuth($authGuard);
+        $authService->revokeApiKey($authContext['user_id'], $apiKeyId);
+        respondJson(204, []);
+        return;
+    }
+
     switch ($path) {
         case '/auth/register':
             enforceAllowedMethod($method, ['POST']);
             $payload = readJsonBody();
             $email = (string) ($payload['email'] ?? '');
             $password = (string) ($payload['password'] ?? '');
-            $user = $authService->register($email, $password);
+            $displayName = isset($payload['displayName']) ? (string) $payload['displayName'] : null;
+            $user = $authService->register($email, $password, $displayName);
             respondJson(201, [
                 'message' => 'User registered successfully.',
                 'user' => $user,
             ]);
+            break;
+
+        case '/auth/me':
+            enforceAllowedMethod($method, ['GET']);
+            $authContext = requireAuth($authGuard);
+            $profile = $authService->getUserProfile($authContext['user_id']);
+            respondJson(200, ['user' => $profile]);
             break;
 
         case '/health':
@@ -89,15 +116,34 @@ try {
             ]);
             break;
 
-        case '/billing/status':
-            enforceAllowedMethod($method, ['GET']);
-            $bearerToken = extractBearerToken();
-            if ($bearerToken === null) {
-                respondJson(401, ['error' => 'Authorization header with Bearer token is required.']);
+        case '/users/me':
+            enforceAllowedMethod($method, ['PATCH']);
+            $authContext = requireAuth($authGuard);
+            $payload = readJsonBody();
+            $allowedKeys = ['displayName', 'password', 'currentPassword'];
+            $changes = array_intersect_key($payload, array_flip($allowedKeys));
+            $updated = $authService->updateUserProfile($authContext['user_id'], $changes);
+            respondJson(200, ['user' => $updated]);
+            break;
+
+        case '/auth/api-keys':
+            enforceAllowedMethod($method, ['GET', 'POST']);
+            $authContext = requireAuth($authGuard);
+            if ($method === 'GET') {
+                $keys = $authService->listApiKeys($authContext['user_id']);
+                respondJson(200, ['apiKeys' => $keys]);
                 break;
             }
 
-            $authContext = $authService->authenticateApiKey($bearerToken);
+            $payload = readJsonBody();
+            $name = isset($payload['name']) ? trim((string) $payload['name']) : null;
+            $apiKey = $authService->createApiKey($authContext['user_id'], $name !== '' ? $name : null);
+            respondJson(201, ['apiKey' => $apiKey]);
+            break;
+
+        case '/billing/status':
+            enforceAllowedMethod($method, ['GET']);
+            $authContext = requireAuth($authGuard);
             $status = $billingService->getStatusForUser($authContext['user_id']);
 
             respondJson(200, [
@@ -112,6 +158,10 @@ try {
         default:
             respondJson(404, ['error' => 'Route not found.']);
     }
+} catch (UnauthorizedException $e) {
+    respondJson(401, ['error' => $e->getMessage()]);
+} catch (ForbiddenException $e) {
+    respondJson(403, ['error' => $e->getMessage()]);
 } catch (InvalidArgumentException $e) {
     respondJson(422, ['error' => $e->getMessage()]);
 } catch (RuntimeException $e) {
@@ -150,20 +200,6 @@ function readJsonBody(): array
     }
 
     return $decoded;
-}
-
-function extractBearerToken(): ?string
-{
-    $header = getAuthorizationHeader();
-    if ($header === null) {
-        return null;
-    }
-
-    if (preg_match('/^Bearer\s+(\S+)$/i', $header, $matches) !== 1) {
-        return null;
-    }
-
-    return $matches[1];
 }
 
 function getAuthorizationHeader(): ?string
@@ -250,6 +286,10 @@ function respondHealth(PDO $pdo): void
     try {
         $pdo->query('SELECT 1');
     } catch (PDOException $e) {
+    
+        if ($statusCode === 204) {
+            return;
+        }
         $databaseStatus = 'fail';
     }
 
@@ -274,157 +314,16 @@ function respondHealth(PDO $pdo): void
  */
 function checkOApiConnectivity(): array
 {
-    $plan = buildOApiPortCandidates();
-    $lastStatus = 0;
-    $lastError = $plan['default_error'];
-    $lastUrl = buildOApiUrl($plan['default_port_hint'] ?? 0);
-
-    foreach ($plan['candidates'] as $port) {
-        $url = buildOApiUrl($port);
-        $result = attemptOApiHealth($url);
-        if ($result['ok']) {
-            return [
-                'ok' => true,
-                'http_status' => $result['http_status'],
-                'attempted_url' => $url,
-                'error_details' => null,
-            ];
-        }
-
-        $lastStatus = $result['http_status'];
-        $lastError = $result['error'];
-        $lastUrl = $url;
-    }
-
-    if ($plan['default_error'] !== null && ($lastError === null || $lastError === 'timeout')) {
-        $lastError = $plan['default_error'];
-        $lastStatus = 0;
-        $lastUrl = buildOApiUrl($plan['default_port_hint'] ?? 0);
-    }
-
-    return [
-        'ok' => false,
-        'http_status' => $lastStatus,
-        'attempted_url' => $lastUrl,
-        'error_details' => $lastError ?? 'timeout',
-    ];
-}
-
-/**
- * @return array{candidates:int[],default_error:?string,default_port_hint:int}
- */
-function buildOApiPortCandidates(): array
-{
-    $candidates = [];
-    $defaultError = null;
-    $defaultPortHint = 0;
-
-    $raw = readEnvValue('O_API_INTERNAL_PORT');
-    if ($raw !== null) {
-        $trimmed = trim($raw);
-        if ($trimmed !== '') {
-            $aliasPort = resolvePortAlias($trimmed);
-            if ($aliasPort !== null) {
-                $candidates[] = $aliasPort;
-                $defaultPortHint = $aliasPort;
-            } elseif (ctype_digit($trimmed)) {
-                $value = (int) $trimmed;
-                if ($value > 0 && $value <= 65535) {
-                    $candidates[] = $value;
-                    $defaultPortHint = $value;
-                } else {
-                    $defaultError = 'invalid_internal_port';
-                    $defaultPortHint = $value;
-                }
-            } else {
-                $defaultError = 'invalid_internal_port';
-                $digits = preg_replace('/\D+/', '', $trimmed);
-                if (is_string($digits) && $digits !== '') {
-                    $defaultPortHint = (int) $digits;
-                }
-            }
-        } else {
-            $defaultError = 'invalid_internal_port';
-        }
-    } else {
-        $defaultError = 'invalid_internal_port';
-    }
-
-    foreach (O_API_PROBE_PORTS as $fallbackPort) {
-        if ($fallbackPort > 0 && $fallbackPort <= 65535 && !in_array($fallbackPort, $candidates, true)) {
-            $candidates[] = $fallbackPort;
-        }
-    }
-
-    if (!isset($candidates[0])) {
-        $candidates[] = $defaultPortHint > 0 && $defaultPortHint <= 65535 ? $defaultPortHint : 8080;
-    }
-
-    if ($defaultPortHint <= 0 || $defaultPortHint > 65535) {
-        $defaultPortHint = $candidates[0] ?? 0;
-    }
-
-    return [
-        'candidates' => $candidates,
-        'default_error' => $defaultError,
-        'default_port_hint' => $defaultPortHint,
-    ];
-}
-
-function readEnvValue(string $key): ?string
-{
-    $value = getenv($key);
-    if ($value !== false && $value !== '') {
-        return $value;
-    }
-
-    if (isset($_ENV[$key]) && $_ENV[$key] !== '') {
-        return (string) $_ENV[$key];
-    }
-
-    if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') {
-        return (string) $_SERVER[$key];
-    }
-
-    return null;
-}
-
-function resolvePortAlias(string $value): ?int
-{
-    if (preg_match('/^\$?\{?PORT\}?$/i', $value) !== 1) {
-        return null;
-    }
-
-    $portEnv = readEnvValue('PORT');
-    if ($portEnv === null) {
-        return null;
-    }
-
-    $trimmed = trim($portEnv);
-    if ($trimmed === '' || !ctype_digit($trimmed)) {
-        return null;
-    }
-
-    $port = (int) $trimmed;
-    if ($port < 1 || $port > 65535) {
-        return null;
-    }
-
-    return $port;
-}
-
-/**
- * @return array{ok:bool,http_status:int,error:?string}
- */
-function attemptOApiHealth(string $url): array
-{
+    // Railway services use port 8080 by default for internal communication
+    $url = 'http://o-api.railway.internal:8080/health';
+    
     $handle = curl_init($url);
-
     if ($handle === false) {
         return [
             'ok' => false,
             'http_status' => 0,
-            'error' => 'timeout',
+            'attempted_url' => $url,
+            'error_details' => 'curl_init_failed',
         ];
     }
 
@@ -441,46 +340,39 @@ function attemptOApiHealth(string $url): array
     }
 
     $response = curl_exec($handle);
-    $status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+    $httpStatus = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
     curl_close($handle);
 
     if ($response === false) {
         return [
             'ok' => false,
             'http_status' => 0,
-            'error' => 'timeout',
+            'attempted_url' => $url,
+            'error_details' => 'connection_failed',
         ];
     }
 
-    $httpStatus = $status !== false ? (int) $status : 0;
     if ($httpStatus >= 200 && $httpStatus < 300) {
         return [
             'ok' => true,
             'http_status' => $httpStatus,
-            'error' => null,
-        ];
-    }
-
-    if ($httpStatus > 0) {
-        return [
-            'ok' => false,
-            'http_status' => $httpStatus,
-            'error' => 'http_error',
+            'attempted_url' => $url,
+            'error_details' => null,
         ];
     }
 
     return [
         'ok' => false,
-        'http_status' => 0,
-        'error' => 'timeout',
+        'http_status' => $httpStatus,
+        'attempted_url' => $url,
+        'error_details' => 'http_error',
     ];
 }
 
-function buildOApiUrl(int $port): string
+/**
+ * @return array{user_id:int,email:string,api_key_id:int}
+ */
+function requireAuth(AuthGuard $authGuard): array
 {
-    if ($port < 0 || $port > 65535) {
-        $port = 0;
-    }
-
-    return sprintf('http://%s:%d/health', O_API_INTERNAL_HOST, $port);
+    return $authGuard->requireUser(getAuthorizationHeader());
 }

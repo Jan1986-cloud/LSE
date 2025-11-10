@@ -9,6 +9,61 @@ This is a comprehensive Mission Brief for the Team Lead responsible for migratin
 **Date:** November 5, 2025
 **Subject:** Implementation Strategy, Milestones, and Standards for the new Microservices Architecture
 
+---
+
+## Phase 0 Completion Summary ✅
+
+**Status:** COMPLETED (November 10, 2025)
+
+### Railway Private Networking - The Correct Approach
+
+Phase 0 has been successfully completed with all services communicating correctly. During implementation, we learned the proper way to handle microservice communication on Railway:
+
+**Key Learnings:**
+
+1. **Railway Private Networking DNS:** Services communicate internally via `<service-name>.railway.internal`
+2. **Default Internal Port:** Railway services expose port 8080 by default for internal communication
+3. **No Fallback Logic Needed:** Railway's infrastructure is reliable - no need for port scanning, fallback arrays, or complex retry mechanisms
+
+**The Correct Implementation Pattern:**
+
+```php
+// Simple, direct connection - no fallbacks needed
+$url = 'http://o-api.railway.internal:8080/health';
+$handle = curl_init($url);
+curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($handle, CURLOPT_TIMEOUT_MS, 1000);
+$response = curl_exec($handle);
+$httpStatus = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+curl_close($handle);
+```
+
+**What We Removed (139 lines of unnecessary code):**
+- ❌ Port scanning across multiple fallback ports [8080, 3000, 8000, 5000]
+- ❌ Complex environment variable resolution logic
+- ❌ Port alias resolution functions
+- ❌ Multi-candidate port building logic
+- ❌ Nested helper functions for simple HTTP calls
+
+**Result:** Clean, maintainable code that follows Railway best practices. Each microservice-to-microservice call is now a single, straightforward HTTP request.
+
+---
+
+## Phase 1 Progress Update 🚀
+
+**Status:** IN FLIGHT (November 10, 2025)
+
+**Highlights:**
+
+1. Authentication core delivered – protected endpoints now validated through a centralized `AuthGuard` with explicit 401/403 handling and dedicated PHPUnit coverage.
+2. API key management enables creation, listing, and revocation with SHA-256 hashing and audit metadata (last four, last used, revocation timestamp).
+3. BillingService refactored with deterministic tiered pricing logic; unit tests confirm staffel discounts across low, medium, and high token volumes.
+4. Default "Starter" billing plan seeded during migrations to guarantee monetization continuity immediately after user registration.
+
+**Next:** Harden production DB migrations and extend integration tests once O-API token logging (Phase 2) is available.
+
+---
+
 ### 1. Mission Objective
 
 Our objective is to transition the existing monolithic AI Content Generator into a scalable, cloud-native, headless SaaS platform hosted on Railway.app. We are decoupling the powerful AI orchestration logic from the WordPress-specific infrastructure to create a highly maintainable and commercially scalable product.
@@ -67,17 +122,20 @@ This project is divided into six phases. Each phase has specific deliverables, t
 *   **Deliverables:** 5 services deployed on Railway, PostgreSQL provisioned, Private Networking configured, finalized JSON schemas for Articles and Blueprints (F1).
 *   **Testing Focus:** Connectivity, deployment stability, schema validation.
 *   **Quality Gate (Go/No-Go):**
-    *   [ ] All 5 services successfully connect to the DB.
-    *   [ ] M-API can successfully ping O-API internally. O/S/A-APIs are confirmed inaccessible from the public internet.
-    *   [ ] DB migrations run without error, including support for large TEXT/BLOB data (F5).
+    *   [✅] All 5 services successfully connect to the DB.
+    *   [✅] M-API can successfully ping O-API internally. O/S/A-APIs are confirmed inaccessible from the public internet.
+    *   [✅] DB migrations run without error, including support for large TEXT/BLOB data (F5).
+    *   [✅] **Code Quality:** Unnecessary complexity removed - clean implementation using Railway best practices (139 lines of fallback logic eliminated).
+
+**Phase 0 Status:** ✅ **COMPLETED** (November 10, 2025)
 
 #### Phase 1: M-API Core - Auth and Billing Structure (F6)
 
 *   **Deliverables:** User authentication, API key management, Billing service logic (pricing/staffel discounts).
 *   **Testing Focus:** Security (Auth tests 401/403/200), Unit tests for billing calculations.
 *   **Quality Gate (Go/No-Go):**
-    *   [ ] All protected endpoints correctly enforce authentication.
-    *   [ ] Billing calculation unit tests pass with 100% accuracy against predefined scenarios (including staffel discounts).
+    *   [✅] All protected endpoints correctly enforce authentication.
+    *   [✅] Billing calculation unit tests pass with 100% accuracy against predefined scenarios (including staffel discounts).
     *   ***Failure Mandate:*** If billing calculations are inaccurate, the `BillingService` must be refactored immediately. We cannot proceed with flawed monetization logic.
 
 #### Phase 2: O-API - Tools, Provenance (F5), and Token Logging (F6)
