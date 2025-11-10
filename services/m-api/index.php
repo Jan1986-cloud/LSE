@@ -9,6 +9,7 @@ if (file_exists($autoloadPath)) {
     foreach ([
         'src/UserAuthService.php',
         'src/BillingService.php',
+        'src/BlueprintService.php',
         'src/AuthGuard.php',
         'src/Exceptions/UnauthorizedException.php',
         'src/Exceptions/ForbiddenException.php',
@@ -18,6 +19,7 @@ if (file_exists($autoloadPath)) {
 }
 
 use LSE\Services\MApi\AuthGuard;
+use LSE\Services\MApi\BlueprintService;
 use LSE\Services\MApi\BillingService;
 use LSE\Services\MApi\Exceptions\ForbiddenException;
 use LSE\Services\MApi\Exceptions\UnauthorizedException;
@@ -37,6 +39,7 @@ try {
 
 $authService = new UserAuthService($pdo);
 $billingService = new BillingService($pdo);
+$blueprintService = new BlueprintService($pdo);
 $authGuard = new AuthGuard($authService);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -49,6 +52,47 @@ try {
         $authContext = requireAuth($authGuard);
         $authService->revokeApiKey($authContext['user_id'], $apiKeyId);
         respondJson(204, []);
+        return;
+    }
+
+    if (preg_match('#^/blueprints/(\d+)$#', $path, $matches) === 1) {
+        $blueprintId = (int) $matches[1];
+        enforceAllowedMethod($method, ['GET', 'PUT', 'PATCH', 'DELETE']);
+        $authContext = requireAuth($authGuard);
+
+        if ($method === 'GET') {
+            $blueprint = $blueprintService->getBlueprint($authContext['user_id'], $blueprintId);
+            if ($blueprint === null) {
+                respondJson(404, ['error' => 'Blueprint not found.']);
+                return;
+            }
+
+            respondJson(200, ['blueprint' => $blueprint]);
+            return;
+        }
+
+        if ($method === 'DELETE') {
+            $deleted = $blueprintService->deleteBlueprint($authContext['user_id'], $blueprintId);
+            if (!$deleted) {
+                respondJson(404, ['error' => 'Blueprint not found.']);
+                return;
+            }
+
+            respondJson(204, []);
+            return;
+        }
+
+        $payload = readJsonBody();
+        $allowedKeys = ['name', 'description', 'category', 'status', 'workflowDefinition'];
+        $changes = array_intersect_key($payload, array_flip($allowedKeys));
+
+        $updated = $blueprintService->updateBlueprint($authContext['user_id'], $blueprintId, $changes);
+        if ($updated === null) {
+            respondJson(404, ['error' => 'Blueprint not found.']);
+            return;
+        }
+
+        respondJson(200, ['blueprint' => $updated]);
         return;
     }
 
@@ -139,6 +183,28 @@ try {
             $name = isset($payload['name']) ? trim((string) $payload['name']) : null;
             $apiKey = $authService->createApiKey($authContext['user_id'], $name !== '' ? $name : null);
             respondJson(201, ['apiKey' => $apiKey]);
+            break;
+
+        case '/blueprints':
+            enforceAllowedMethod($method, ['GET', 'POST']);
+            $authContext = requireAuth($authGuard);
+            if ($method === 'GET') {
+                $blueprints = $blueprintService->listBlueprints($authContext['user_id']);
+                respondJson(200, ['blueprints' => $blueprints]);
+                break;
+            }
+
+            $payload = readJsonBody();
+            $input = [
+                'name' => $payload['name'] ?? null,
+                'description' => $payload['description'] ?? null,
+                'category' => $payload['category'] ?? null,
+                'status' => $payload['status'] ?? null,
+                'workflowDefinition' => $payload['workflowDefinition'] ?? null,
+            ];
+
+            $blueprint = $blueprintService->createBlueprint($authContext['user_id'], $input);
+            respondJson(201, ['blueprint' => $blueprint]);
             break;
 
         case '/billing/status':

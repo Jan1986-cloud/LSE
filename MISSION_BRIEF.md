@@ -77,6 +77,20 @@ curl_close($handle);
 
 ---
 
+## Phase 3 Addendum 🚧
+
+**Status:** KICKOFF (November 10, 2025)
+
+**Blueprint Foundation (M-API):**
+
+- REST endpoints for `/blueprints` and `/blueprints/{id}` now ship with full CRUD support behind AuthGuard enforcement. Token-authenticated operators can list, create, update (with version bump logic), and delete blueprints through a deterministic JSON contract.
+- `BlueprintService` encapsulates persistence and validation: PSR-12 PHP, PDO-backed workflow storage, and automatic version increments when structural fields (`name`, `category`, `description`, `workflowDefinition`) change. Status-only edits leave versions untouched for stable release management.
+- PHPUnit 10.5 coverage uses an in-memory SQLite harness to assert creation, ordering (newest-first with deterministic fallback), version bump semantics, and guardrails against invalid status mutations. Test suite passes in CI (`composer test`).
+
+**Next:** Wire M-API blueprint APIs into the O-API orchestrator contract (`/orchestrate/run-blueprint`), introduce workflow execution fixtures, and begin validating end-to-end context injection (F2) alongside blueprint-driven tool sequencing (F1).
+
+---
+
 ### 1. Mission Objective
 
 Our objective is to transition the existing monolithic AI Content Generator into a scalable, cloud-native, headless SaaS platform hosted on Railway.app. We are decoupling the powerful AI orchestration logic from the WordPress-specific infrastructure to create a highly maintainable and commercially scalable product.
