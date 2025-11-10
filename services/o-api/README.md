@@ -1,32 +1,32 @@
 # O-API Service
 
 ## Role
-Operational tooling API providing research, validation, and token usage aggregation utilities for internal consumers.
+Operational orchestration helpers powering research provenance, JSON validation, and token usage accounting for internal services.
 
 ## Exposure
 - **Internal-only** via Railway Private Networking at `http://o-api.railway.internal`.
-- Not exposed to the public internet.
+- Never expose this service to the public internet.
 
 ## Endpoints
 | Path | Method | Description |
 |------|--------|-------------|
-| `/` | POST | Execute the default research work-flow. |
-| `/health` | GET | Returns `{"status":"ok"}` for readiness. |
-| `/live` | GET | Returns `{"status":"live"}` for basic liveness checks. |
+| `/health` | GET | Readiness indicator consumed by Railway. |
+| `/internal/ping` | GET | Internal connectivity probe used by other services. |
 
-## Environment
-No runtime environment variables are required.
+## Core Components
+- **ResearchTool** &ndash; captures HTML snapshots with checksums and timestamps into `cms_sources`, satisfying Phase 2 provenance requirements.
+- **WritingTool** &ndash; wraps LLM completions, records aggregate usage through the `TokenUsageAggregator`, and returns normalized content payloads.
+- **JsonValidatorTool** &ndash; validates and auto-repairs common JSON defects (e.g., trailing commas) before handing results back to orchestrators.
+- **TokenUsageAggregator** &ndash; canonical entry point for logging prompt/response tokens, workflow IDs, and metadata into `cms_token_logs`.
 
-## Local Development
+## Testing
 ```bash
 composer install
-php -S 0.0.0.0:8080 index.php
+composer test
 ```
 
-## Health Expectations
-- `/health` accessible only inside the private network.
-- `/live` is suitable for basic container monitoring.
+All external integrations (LLMs, HTTP fetches) are mocked in the PHPUnit suite to guarantee deterministic CI runs.
 
 ## Networking Notes
-- Accessibly by `m-api` and other internal services through `http://o-api.railway.internal:<port>`.
-- Documented in the Phase 0 private networking policy.
+- Reachable only by internal peers (e.g., `m-api`, `s-api`) via Railway's private DNS: `http://o-api.railway.internal:8080`.
+- Honour the Phase 0 private networking policy; no public ingress rules should target this service.

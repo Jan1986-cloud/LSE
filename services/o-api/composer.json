@@ -5,13 +5,28 @@
     "ext-pdo_pgsql": "*",
     "ext-curl": "*"
   },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "LSE\\Services\\OApi\\": "src/",
+      "LSE\\Services\\OApi\\Tools\\": "tools/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "LSE\\Services\\OApi\\Tests\\": "tests/"
+    }
+  },
   "scripts": {
     "post-install-cmd": [
       "php ../../tools/copy_shared.php"
     ],
     "post-update-cmd": [
       "php ../../tools/copy_shared.php"
-    ]
+    ],
+    "test": "vendor/bin/phpunit"
   },
   "config": {
     "platform-check": false

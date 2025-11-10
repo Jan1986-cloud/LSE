@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LSE\Services\OApi\Tools;
 
+use DateTimeImmutable;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -11,21 +12,37 @@ use RuntimeException;
 final class ResearchTool
 {
     private PDO $pdo;
+    private HtmlFetcherInterface $fetcher;
 
-    public function __construct(?PDO $pdo = null)
+    /** @var callable():DateTimeImmutable */
+    private $clock;
+
+    /**
+     * @param callable():DateTimeImmutable|null $clock
+     */
+    public function __construct(?PDO $pdo = null, ?HtmlFetcherInterface $fetcher = null, ?callable $clock = null)
     {
         $this->pdo = $pdo ?? $this->createConnection();
+        $this->fetcher = $fetcher ?? new CurlHtmlFetcher();
+        $this->clock = $clock ?? static fn (): DateTimeImmutable => new DateTimeImmutable('now');
     }
 
-    public function captureSource(string $url): int
+    /**
+     * @return array{id:int, checksum:string, captured_at:DateTimeImmutable, title:?string}
+     */
+    public function captureSource(string $url, ?int $blueprintId = null, ?string $author = null): array
     {
         if (filter_var($url, FILTER_VALIDATE_URL) === false) {
             throw new RuntimeException('Invalid URL provided for captureSource.');
         }
 
-        $htmlSnapshot = $this->fetchHtmlSnapshot($url);
+        $htmlSnapshot = $this->fetcher->fetch($url);
         $title = $this->extractTitle($htmlSnapshot);
         $checksum = hash('sha256', $htmlSnapshot);
+        $capturedAt = ($this->clock)();
+
+    $driver = strtolower((string) ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) ?: 'pgsql'));
+    $isPgsql = $driver === 'pgsql' || $driver === 'postgresql';
 
         $sql = <<<'SQL'
 INSERT INTO cms_sources (
@@ -33,19 +50,31 @@ INSERT INTO cms_sources (
     source_url,
     title,
     html_snapshot,
-    checksum
+    checksum,
+    author,
+    captured_at
 ) VALUES (
     :blueprint_id,
     :source_url,
     :title,
     :html_snapshot,
-    :checksum
+    :checksum,
+    :author,
+    :captured_at
 )
-RETURNING id
 SQL;
 
+        if ($isPgsql) {
+            $sql .= '\nRETURNING id';
+        }
+
         $statement = $this->pdo->prepare($sql);
-        $statement->bindValue(':blueprint_id', null, PDO::PARAM_NULL);
+        if ($blueprintId !== null) {
+            $statement->bindValue(':blueprint_id', $blueprintId, PDO::PARAM_INT);
+        } else {
+            $statement->bindValue(':blueprint_id', null, PDO::PARAM_NULL);
+        }
+
         $statement->bindValue(':source_url', $url, PDO::PARAM_STR);
 
         if ($title !== null) {
@@ -56,6 +85,13 @@ SQL;
 
         $statement->bindValue(':html_snapshot', $htmlSnapshot, PDO::PARAM_STR);
         $statement->bindValue(':checksum', $checksum, PDO::PARAM_STR);
+        if ($author !== null) {
+            $statement->bindValue(':author', $author, PDO::PARAM_STR);
+        } else {
+            $statement->bindValue(':author', null, PDO::PARAM_NULL);
+        }
+
+        $statement->bindValue(':captured_at', $capturedAt->format('c'), PDO::PARAM_STR);
 
         try {
             $statement->execute();
@@ -63,54 +99,32 @@ SQL;
             throw new RuntimeException('Failed to insert source snapshot: ' . $exception->getMessage(), 0, $exception);
         }
 
-        $insertedId = $statement->fetchColumn();
+        if ($isPgsql) {
+            $insertedId = $statement->fetchColumn();
+            if ($insertedId === false) {
+                throw new RuntimeException('Failed to retrieve source identifier.');
+            }
 
-        if ($insertedId === false) {
+            return [
+                'id' => (int) $insertedId,
+                'checksum' => $checksum,
+                'captured_at' => $capturedAt,
+                'title' => $title,
+            ];
+        }
+
+        $lastInsertId = $this->pdo->lastInsertId();
+
+        if ($lastInsertId === false) {
             throw new RuntimeException('Failed to retrieve source identifier.');
         }
 
-        return (int) $insertedId;
-    }
-
-    private function fetchHtmlSnapshot(string $url): string
-    {
-        $curlHandle = curl_init($url);
-
-        if ($curlHandle === false) {
-            throw new RuntimeException('Unable to initialize cURL for source capture.');
-        }
-
-        curl_setopt_array($curlHandle, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT => 15,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_USERAGENT => 'ProjectAurora-ResearchTool/1.0',
-            CURLOPT_ACCEPT_ENCODING => '',
-        ]);
-
-        $response = curl_exec($curlHandle);
-        $curlError = curl_error($curlHandle);
-        $httpStatus = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
-        curl_close($curlHandle);
-
-        if ($response === false) {
-            throw new RuntimeException(
-                'cURL error while fetching source: ' . ($curlError !== '' ? $curlError : 'unknown error')
-            );
-        }
-
-        if ($httpStatus >= 400 || $httpStatus === 0) {
-            throw new RuntimeException('Unexpected HTTP status code while fetching source: ' . $httpStatus);
-        }
-
-        $trimmedResponse = trim($response);
-
-        if ($trimmedResponse === '') {
-            throw new RuntimeException('Source returned an empty response.');
-        }
-
-        return $response;
+        return [
+            'id' => (int) $lastInsertId,
+            'checksum' => $checksum,
+            'captured_at' => $capturedAt,
+            'title' => $title,
+        ];
     }
 
     private function extractTitle(string $html): ?string

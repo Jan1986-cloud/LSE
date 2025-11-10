@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace LSE\Services\OApi\Tools;
 
+use JsonException;
 use PDO;
 use PDOException;
-use JsonException;
 use RuntimeException;
 
-final class TokenUsageAggregator
+final class TokenUsageAggregator implements TokenUsageLoggerInterface
 {
     private PDO $pdo;
 
@@ -43,6 +43,9 @@ final class TokenUsageAggregator
             }
         }
 
+    $driver = strtolower((string) ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) ?: 'pgsql'));
+    $isPgsql = $driver === 'pgsql' || $driver === 'postgresql';
+
         $sql = <<<'SQL'
 INSERT INTO cms_token_logs (
     user_id,
@@ -65,8 +68,11 @@ INSERT INTO cms_token_logs (
     :cost_amount,
     :metadata
 )
-RETURNING id
 SQL;
+
+        if ($isPgsql) {
+            $sql .= '\nRETURNING id';
+        }
 
         $statement = $this->pdo->prepare($sql);
         $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
@@ -96,13 +102,22 @@ SQL;
             throw new RuntimeException('Failed to log token usage: ' . $exception->getMessage(), 0, $exception);
         }
 
-        $insertedId = $statement->fetchColumn();
+        if ($isPgsql) {
+            $insertedId = $statement->fetchColumn();
+            if ($insertedId === false) {
+                throw new RuntimeException('Failed to retrieve token log identifier.');
+            }
 
-        if ($insertedId === false) {
+            return (int) $insertedId;
+        }
+
+        $lastInsertId = $this->pdo->lastInsertId();
+
+        if ($lastInsertId === false) {
             throw new RuntimeException('Failed to retrieve token log identifier.');
         }
 
-        return (int) $insertedId;
+        return (int) $lastInsertId;
     }
 
     private function createConnection(): PDO
