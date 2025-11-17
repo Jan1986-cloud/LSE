@@ -5,13 +5,12 @@ declare(strict_types=1);
 final class LSE_Headless_AI_Api_Client
 {
     /**
+     * Map service identifiers to their public URLs.
+     * Only M-API is directly accessible - all other services are internal.
      * @var array<string,string>
      */
-    private array $serviceOptionMap = [
-        'm_api' => 'm_api_base_url',
-        's_api' => 's_api_base_url',
-        'a_api' => 'a_api_base_url',
-        'c_api' => 'c_api_base_url',
+    private array $serviceUrlMap = [
+        'm_api' => LSE_M_API_URL,
     ];
 
     /**
@@ -25,24 +24,13 @@ final class LSE_Headless_AI_Api_Client
      */
     public function request(string $service, string $path, string $method = 'GET', ?array $payload = null): array
     {
-        $options = $this->getOptions();
-        $optionKey = $this->serviceOptionMap[$service] ?? null;
-        if ($optionKey === null) {
+        $baseUrl = $this->serviceUrlMap[$service] ?? null;
+        if ($baseUrl === null) {
             return [
                 'ok' => false,
                 'status' => 0,
                 'data' => null,
                 'error' => sprintf('Unknown service "%s".', $service),
-            ];
-        }
-
-        $baseUrl = isset($options[$optionKey]) ? trim((string) $options[$optionKey]) : '';
-        if ($baseUrl === '') {
-            return [
-                'ok' => false,
-                'status' => 0,
-                'data' => null,
-                'error' => sprintf('Service base URL for "%s" is not configured.', $service),
             ];
         }
 
@@ -119,10 +107,6 @@ final class LSE_Headless_AI_Api_Client
     public function getOptions(): array
     {
         $defaults = [
-            'm_api_base_url' => '',
-            's_api_base_url' => '',
-            'a_api_base_url' => '',
-            'c_api_base_url' => '',
             'api_key' => '',
             'site_context_id' => '',
         ];

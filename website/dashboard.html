@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - LightSpeed Editor</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dashboard-layout">
+    <nav class="dashboard-nav">
+        <div class="dashboard-header">
+            <a href="/" class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">LightSpeed Editor</span>
+            </a>
+        </div>
+        <ul class="dashboard-menu">
+            <li><a href="dashboard.html" class="active">Dashboard</a></li>
+            <li><a href="api-keys.html">API Keys</a></li>
+            <li><a href="billing.html">Facturatie</a></li>
+            <li><a href="settings.html">Instellingen</a></li>
+        </ul>
+        <div class="dashboard-footer">
+            <a href="#" id="logout-btn">Uitloggen</a>
+        </div>
+    </nav>
+
+    <main class="dashboard-main">
+        <header class="dashboard-page-header">
+            <h1>Dashboard</h1>
+            <p>Welkom terug, <span id="user-name">gebruiker</span></p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Tokens Gebruikt</div>
+                        <div class="stat-value" id="tokens-used">-</div>
+                        <div class="stat-note">deze maand</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Huidige Kosten</div>
+                        <div class="stat-value" id="current-cost">-</div>
+                        <div class="stat-note">excl. BTW</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📝</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Blueprints</div>
+                        <div class="stat-value" id="blueprint-count">-</div>
+                        <div class="stat-note">actieve workflows</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🔑</div>
+                    <div class="stat-content">
+                        <div class="stat-label">API Keys</div>
+                        <div class="stat-value" id="api-key-count">-</div>
+                        <div class="stat-note">actief</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <h2>Snelle Acties</h2>
+                <div class="action-buttons">
+                    <a href="api-keys.html" class="btn-primary">
+                        <span>🔑</span> Nieuwe API Key
+                    </a>
+                    <a href="https://docs.lightspeed-editor.eu" class="btn-secondary" target="_blank">
+                        <span>📖</span> Documentatie
+                    </a>
+                    <a href="https://github.com/lightspeed-editor/wordpress-plugin" class="btn-secondary" target="_blank">
+                        <span>⬇️</span> Plugin Downloaden
+                    </a>
+                </div>
+            </div>
+
+            <!-- Getting Started -->
+            <div class="card">
+                <h2>Aan de Slag</h2>
+                <div class="checklist">
+                    <div class="checklist-item" id="check-api-key">
+                        <span class="check">☐</span>
+                        <div>
+                            <strong>API Key Aangemaakt</strong>
+                            <p>Maak een API key aan voor je WordPress installatie</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item" id="check-plugin">
+                        <span class="check">☐</span>
+                        <div>
+                            <strong>Plugin Geïnstalleerd</strong>
+                            <p>Download en installeer de WordPress plugin</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item" id="check-configured">
+                        <span class="check">☐</span>
+                        <div>
+                            <strong>Plugin Geconfigureerd</strong>
+                            <p>Voer je API key in de plugin settings in</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item" id="check-blueprint">
+                        <span class="check">☐</span>
+                        <div>
+                            <strong>Eerste Blueprint</strong>
+                            <p>Maak je eerste content workflow aan</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <h2>Recente Activiteit</h2>
+                <div id="recent-activity" class="activity-list">
+                    <p class="text-muted">Laden...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -31,5 +31,23 @@ name = "db-migrator"
 source = "scripts"
 startCommand = "php -S 0.0.0.0:$PORT index.php"
 
+[[services]]
+name = "website-wp"
+source = "services/website-wp"
+
+[services.website-wp.build]
+dockerfilePath = "Dockerfile"
+
+[services.website-wp.deploy]
+startCommand = "/bin/bash /var/www/html/init.sh"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Environment variables needed (set in Railway dashboard):
+# MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
+# WP_ADMIN_USER, WP_ADMIN_PASSWORD, WP_ADMIN_EMAIL
+# WP_AUTH_KEY, WP_SECURE_AUTH_KEY, etc (8 keys total)
+# LSE_M_API_URL, LSE_API_KEY
+
 [deploy.restartPolicy]
 type = "ON_FAILURE"

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Keys - LightSpeed Editor</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dashboard-layout">
+    <nav class="dashboard-nav">
+        <div class="dashboard-header">
+            <a href="/" class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">LightSpeed Editor</span>
+            </a>
+        </div>
+        <ul class="dashboard-menu">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="api-keys.html" class="active">API Keys</a></li>
+            <li><a href="billing.html">Facturatie</a></li>
+            <li><a href="settings.html">Instellingen</a></li>
+        </ul>
+        <div class="dashboard-footer">
+            <a href="#" id="logout-btn">Uitloggen</a>
+        </div>
+    </nav>
+
+    <main class="dashboard-main">
+        <header class="dashboard-page-header">
+            <h1>API Keys</h1>
+            <button class="btn-primary" onclick="showCreateModal()">+ Nieuwe API Key</button>
+        </header>
+
+        <div id="error-message" class="alert alert-error" style="display: none;"></div>
+        <div id="success-message" class="alert alert-success" style="display: none;"></div>
+
+        <div class="card">
+            <h2>Actieve API Keys</h2>
+            <p class="text-muted">Gebruik deze keys om je WordPress sites te verbinden met LightSpeed Editor</p>
+            
+            <div id="api-keys-list" class="api-keys-table">
+                <p>Laden...</p>
+            </div>
+        </div>
+
+        <div class="card info-card">
+            <h3>⚠️ Belangrijk</h3>
+            <ul>
+                <li>Deel je API keys <strong>nooit</strong> met anderen</li>
+                <li>Elke key wordt maar <strong>één keer</strong> getoond bij aanmaken</li>
+                <li>Sla je keys veilig op (bijv. in een wachtwoord manager)</li>
+                <li>Bij verlies: verwijder de oude key en maak een nieuwe aan</li>
+            </ul>
+        </div>
+    </main>
+
+    <!-- Create API Key Modal -->
+    <div id="create-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeCreateModal()">&times;</span>
+            <h2>Nieuwe API Key Aanmaken</h2>
+            
+            <form id="create-api-key-form">
+                <div class="form-group">
+                    <label for="key-name">Naam (optioneel)</label>
+                    <input type="text" id="key-name" name="key-name" placeholder="bijv. Productie Website">
+                    <small>Geef je key een herkenbare naam</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeCreateModal()">Annuleren</button>
+                    <button type="submit" class="btn-primary">Key Aanmaken</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Show API Key Modal -->
+    <div id="show-key-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>✅ API Key Aangemaakt</h2>
+            <div class="alert alert-warning">
+                <strong>Let op:</strong> Deze key wordt maar één keer getoond. Kopieer en bewaar deze veilig!
+            </div>
+            
+            <div class="api-key-display">
+                <code id="new-api-key"></code>
+                <button class="btn-copy" onclick="copyApiKey()">📋 Kopiëren</button>
+            </div>
+            
+            <p class="text-muted">
+                Gebruik deze key in je WordPress plugin onder Settings → API Key
+            </p>
+            
+            <button class="btn-primary btn-full" onclick="closeShowKeyModal()">Begrepen, Key Opgeslagen</button>
+        </div>
+    </div>
+
+    <script src="js/api-keys.js"></script>
+</body>
+</html>

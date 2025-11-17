@@ -13,6 +13,15 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Railway Production Service URLs
+ * Only M-API is needed - all requests are routed through the Management API.
+ * Internal services (O-API, S-API, A-API, C-API) are accessed via M-API proxying.
+ */
+if (! defined('LSE_M_API_URL')) {
+    define('LSE_M_API_URL', getenv('LSE_M_API_URL') ?: 'https://m-api-production.up.railway.app');
+}
+
 require_once __DIR__ . '/includes/class-lse-headless-ai-plugin.php';
 require_once __DIR__ . '/includes/class-lse-headless-ai-api-client.php';
 

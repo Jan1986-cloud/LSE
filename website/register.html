@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registreren - LightSpeed Editor</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <div class="container">
+                <div class="nav-content">
+                    <a href="/" class="logo">
+                        <span class="logo-icon">⚡</span>
+                        <span class="logo-text">LightSpeed Editor</span>
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="auth-page">
+        <div class="auth-container">
+            <div class="auth-card">
+                <h1>Account Aanmaken</h1>
+                <p class="auth-subtitle">Start je 14 dagen gratis trial. Geen creditcard vereist.</p>
+
+                <div id="error-message" class="alert alert-error" style="display: none;"></div>
+                <div id="success-message" class="alert alert-success" style="display: none;"></div>
+
+                <form id="register-form" class="auth-form">
+                    <!-- Step 1: Account Info -->
+                    <div id="step-1" class="form-step active">
+                        <h3>Stap 1: Account Gegevens</h3>
+                        
+                        <div class="form-group">
+                            <label for="email">Email *</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password">Wachtwoord *</label>
+                            <input type="password" id="password" name="password" required minlength="8">
+                            <small>Minimaal 8 karakters</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-confirm">Bevestig Wachtwoord *</label>
+                            <input type="password" id="password-confirm" name="password-confirm" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="display-name">Naam</label>
+                            <input type="text" id="display-name" name="display-name">
+                        </div>
+
+                        <button type="button" class="btn-primary btn-full" onclick="goToStep(2)">
+                            Volgende: Factuurgegevens
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Billing Info -->
+                    <div id="step-2" class="form-step">
+                        <h3>Stap 2: Factuurgegevens</h3>
+                        
+                        <div class="form-group">
+                            <label for="company-name">Bedrijfsnaam *</label>
+                            <input type="text" id="company-name" name="company-name" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="vat-number">BTW Nummer</label>
+                            <input type="text" id="vat-number" name="vat-number" placeholder="NL123456789B01">
+                            <small>Optioneel - voor BTW vrijstelling binnen EU</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="address">Adres *</label>
+                            <input type="text" id="address" name="address" required>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="postal-code">Postcode *</label>
+                                <input type="text" id="postal-code" name="postal-code" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="city">Plaats *</label>
+                                <input type="text" id="city" name="city" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="country">Land *</label>
+                            <select id="country" name="country" required>
+                                <option value="">Selecteer land</option>
+                                <option value="NL">Nederland</option>
+                                <option value="BE">België</option>
+                                <option value="DE">Duitsland</option>
+                                <option value="FR">Frankrijk</option>
+                                <option value="GB">Verenigd Koninkrijk</option>
+                                <option value="US">Verenigde Staten</option>
+                            </select>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" onclick="goToStep(1)">Vorige</button>
+                            <button type="button" class="btn-primary" onclick="goToStep(3)">Volgende: Plan Kiezen</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Plan Selection -->
+                    <div id="step-3" class="form-step">
+                        <h3>Stap 3: Kies je Plan</h3>
+                        
+                        <div class="plan-selection">
+                            <label class="plan-option">
+                                <input type="radio" name="plan" value="starter" checked>
+                                <div class="plan-card">
+                                    <h4>Starter</h4>
+                                    <div class="plan-price">€29/maand</div>
+                                    <ul>
+                                        <li>50.000 tokens/maand</li>
+                                        <li>5 Blueprints</li>
+                                        <li>Basis analytics</li>
+                                    </ul>
+                                </div>
+                            </label>
+
+                            <label class="plan-option">
+                                <input type="radio" name="plan" value="professional">
+                                <div class="plan-card featured">
+                                    <span class="badge">Aanbevolen</span>
+                                    <h4>Professional</h4>
+                                    <div class="plan-price">€99/maand</div>
+                                    <ul>
+                                        <li>250.000 tokens/maand</li>
+                                        <li>Onbeperkt Blueprints</li>
+                                        <li>AI agent tracking</li>
+                                    </ul>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="terms" name="terms" required>
+                                Ik ga akkoord met de <a href="terms.html" target="_blank">Algemene Voorwaarden</a> 
+                                en <a href="privacy.html" target="_blank">Privacy Policy</a>
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" onclick="goToStep(2)">Vorige</button>
+                            <button type="submit" class="btn-primary" id="submit-btn">
+                                <span class="btn-text">Account Aanmaken</span>
+                                <span class="btn-loading" style="display: none;">
+                                    <span class="spinner"></span> Registreren...
+                                </span>
+                            </button>
+                        </div>
+
+                        <p class="trial-note">
+                            💳 Je creditcard wordt pas belast na de 14 dagen trial periode
+                        </p>
+                    </div>
+                </form>
+
+                <p class="auth-footer">
+                    Al een account? <a href="login.html">Log hier in</a>
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/register.js"></script>
+</body>
+</html>

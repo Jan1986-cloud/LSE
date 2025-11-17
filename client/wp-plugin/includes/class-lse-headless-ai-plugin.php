@@ -54,18 +54,15 @@ final class LSE_Headless_AI_Plugin
             'lse_headless_ai_settings_section',
             'Service Connectivity',
             static function (): void {
-                echo '<p>Configure base URLs for each microservice (e.g. https://m-api-production.up.railway.app). Include the scheme and omit trailing slashes.</p>';
+                echo '<p>Enter your Luminate Strategy Engine API key to connect your WordPress site to the AI platform.</p>';
+                echo '<p class="description">The API key is provided when you register for an account. All service endpoints are pre-configured.</p>';
             },
             'lse-headless-ai-settings'
         );
 
         $fields = [
-            'm_api_base_url' => 'M-API Base URL',
-            's_api_base_url' => 'S-API Base URL',
-            'a_api_base_url' => 'A-API Base URL',
-            'c_api_base_url' => 'C-API Base URL',
-            'api_key' => 'Operator API Key',
-            'site_context_id' => 'Site Context ID',
+            'api_key' => 'API Key',
+            'site_context_id' => 'Site Context ID (Optional)',
         ];
 
         foreach ($fields as $key => $label) {
@@ -184,13 +181,18 @@ final class LSE_Headless_AI_Plugin
             wp_die('Insufficient permissions.');
         }
 
+        echo '<div class="wrap">';
+        echo '<h1>Blueprints</h1>';
+
+        if (! $this->checkApiKeyConfigured()) {
+            echo '</div>';
+            return;
+        }
+
         $listResponse = $this->client->request('m_api', '/blueprints', 'GET');
         $blueprints = $listResponse['ok'] && isset($listResponse['data']['blueprints']) && is_array($listResponse['data']['blueprints'])
             ? $listResponse['data']['blueprints']
             : [];
-
-        echo '<div class="wrap">';
-        echo '<h1>Blueprints</h1>';
 
         if (! $listResponse['ok']) {
             $error = esc_html($listResponse['error'] ?? 'Unable to load blueprints.');
@@ -238,6 +240,14 @@ final class LSE_Headless_AI_Plugin
             wp_die('Insufficient permissions.');
         }
 
+        echo '<div class="wrap">';
+        echo '<h1>Strategy Suggestions</h1>';
+
+        if (! $this->checkApiKeyConfigured()) {
+            echo '</div>';
+            return;
+        }
+
         $options = $this->client->getOptions();
         $defaultContext = isset($options['site_context_id']) ? (int) $options['site_context_id'] : 0;
 
@@ -270,7 +280,8 @@ final class LSE_Headless_AI_Plugin
                         $payload['blueprintIds'] = $blueprintIds;
                     }
 
-                    $response = $this->client->request('s_api', '/strategy/suggestions', 'POST', $payload);
+                    // Strategy suggestions are routed through M-API which calls S-API internally
+                    $response = $this->client->request('m_api', '/strategy/suggestions', 'POST', $payload);
                     if ($response['ok']) {
                         $suggestions = $response['data']['suggestions'] ?? [];
                         $count = is_array($suggestions) ? count($suggestions) : 0;
@@ -282,8 +293,6 @@ final class LSE_Headless_AI_Plugin
             }
         }
 
-        echo '<div class="wrap">';
-        echo '<h1>Strategy Suggestions</h1>';
         echo '<p>Provide recent trend signals to generate prioritized content actions using the Strategy API.</p>';
         echo '<form method="post">';
         wp_nonce_field('lse_generate_suggestions');
@@ -319,6 +328,14 @@ final class LSE_Headless_AI_Plugin
             wp_die('Insufficient permissions.');
         }
 
+        echo '<div class="wrap">';
+        echo '<h1>Analytics & Agent Detection</h1>';
+
+        if (! $this->checkApiKeyConfigured()) {
+            echo '</div>';
+            return;
+        }
+
         $detections = null;
         if (isset($_POST['lse_detect_agents'])) {
             check_admin_referer('lse_detect_agents');
@@ -328,7 +345,8 @@ final class LSE_Headless_AI_Plugin
             if (! is_array($events)) {
                 $this->addNotice('error', 'Agent events must be valid JSON.');
             } else {
-                $response = $this->client->request('s_api', '/strategy/agent-detections', 'POST', ['events' => $events]);
+                // Agent detection is routed through M-API which calls S-API internally
+                $response = $this->client->request('m_api', '/analytics/agent-detections', 'POST', ['events' => $events]);
                 if ($response['ok']) {
                     $detections = $response['data']['detections'] ?? [];
                     $count = is_array($detections) ? count($detections) : 0;
@@ -339,8 +357,6 @@ final class LSE_Headless_AI_Plugin
             }
         }
 
-        echo '<div class="wrap">';
-        echo '<h1>Analytics & Agent Detection</h1>';
         echo '<p>Submit analytics log samples to classify AI agent activity for your site.</p>';
         echo '<form method="post">';
         wp_nonce_field('lse_detect_agents');
@@ -373,10 +389,23 @@ final class LSE_Headless_AI_Plugin
             wp_die('Insufficient permissions.');
         }
 
-        $response = $this->client->request('m_api', '/billing/status', 'GET');
-
         echo '<div class="wrap">';
         echo '<h1>Billing Overview</h1>';
+
+        // Check if API key is configured
+        $options = $this->client->getOptions();
+        $apiKey = isset($options['api_key']) ? trim((string) $options['api_key']) : '';
+        
+        if ($apiKey === '') {
+            printf(
+                '<div class="notice notice-warning"><p>Please configure your API key in <a href="%s">Settings</a> to view billing information.</p></div>',
+                esc_url(admin_url('admin.php?page=lse-headless-ai-settings'))
+            );
+            echo '</div>';
+            return;
+        }
+
+        $response = $this->client->request('m_api', '/billing/status', 'GET');
 
         if (! $response['ok'] || ! isset($response['data']['billing'])) {
             $error = esc_html($response['error'] ?? 'Unable to retrieve billing status.');
@@ -424,6 +453,26 @@ final class LSE_Headless_AI_Plugin
             printf('<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>', esc_attr($notice['type']), esc_html($notice['message']));
         }
         $this->notices = [];
+    }
+
+    /**
+     * Check if API key is configured, show warning if not.
+     * @return bool True if configured, false otherwise
+     */
+    private function checkApiKeyConfigured(): bool
+    {
+        $options = $this->client->getOptions();
+        $apiKey = isset($options['api_key']) ? trim((string) $options['api_key']) : '';
+        
+        if ($apiKey === '') {
+            printf(
+                '<div class="notice notice-warning"><p>Please configure your API key in <a href="%s">Settings</a> to use this feature.</p></div>',
+                esc_url(admin_url('admin.php?page=lse-headless-ai-settings'))
+            );
+            return false;
+        }
+        
+        return true;
     }
 
     private function addNotice(string $type, string $message): void

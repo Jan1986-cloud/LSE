@@ -221,6 +221,26 @@ try {
             ]);
             break;
 
+        case '/strategy/suggestions':
+            enforceAllowedMethod($method, ['POST']);
+            $authContext = requireAuth($authGuard);
+            $payload = readJsonBody();
+            
+            // Proxy to S-API via Railway internal network
+            $response = proxyToInternalService('s-api', '/strategy/suggestions', 'POST', $payload);
+            respondJson($response['status'], $response['data']);
+            break;
+
+        case '/analytics/agent-detections':
+            enforceAllowedMethod($method, ['POST']);
+            $authContext = requireAuth($authGuard);
+            $payload = readJsonBody();
+            
+            // Proxy to S-API via Railway internal network
+            $response = proxyToInternalService('s-api', '/strategy/agent-detections', 'POST', $payload);
+            respondJson($response['status'], $response['data']);
+            break;
+
         default:
             respondJson(404, ['error' => 'Route not found.']);
     }
@@ -441,4 +461,70 @@ function checkOApiConnectivity(): array
 function requireAuth(AuthGuard $authGuard): array
 {
     return $authGuard->requireUser(getAuthorizationHeader());
+}
+
+/**
+ * Proxy a request to an internal Railway service.
+ * 
+ * @param string $service Service name (e.g., 's-api', 'o-api', 'a-api')
+ * @param string $path API path to call
+ * @param string $method HTTP method
+ * @param array<string,mixed>|null $payload Request body
+ * @return array{status:int,data:array<string,mixed>}
+ */
+function proxyToInternalService(string $service, string $path, string $method = 'GET', ?array $payload = null): array
+{
+    $url = sprintf('http://%s.railway.internal:8080%s', $service, $path);
+    
+    $handle = curl_init($url);
+    if ($handle === false) {
+        return [
+            'status' => 503,
+            'data' => ['error' => 'Failed to initialize internal service connection.'],
+        ];
+    }
+
+    curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($handle, CURLOPT_CUSTOMREQUEST, $method);
+    curl_setopt($handle, CURLOPT_TIMEOUT, 30);
+    
+    $headers = ['Content-Type: application/json'];
+    
+    if ($payload !== null) {
+        $json = json_encode($payload);
+        if ($json === false) {
+            return [
+                'status' => 500,
+                'data' => ['error' => 'Failed to encode request payload.'],
+            ];
+        }
+        curl_setopt($handle, CURLOPT_POSTFIELDS, $json);
+    }
+    
+    curl_setopt($handle, CURLOPT_HTTPHEADER, $headers);
+    
+    $response = curl_exec($handle);
+    $httpStatus = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+    $error = curl_error($handle);
+    curl_close($handle);
+    
+    if ($response === false) {
+        return [
+            'status' => 503,
+            'data' => ['error' => 'Internal service unavailable.', 'details' => $error],
+        ];
+    }
+    
+    $decoded = json_decode($response, true);
+    if (!is_array($decoded)) {
+        return [
+            'status' => 502,
+            'data' => ['error' => 'Invalid response from internal service.'],
+        ];
+    }
+    
+    return [
+        'status' => $httpStatus,
+        'data' => $decoded,
+    ];
 }
